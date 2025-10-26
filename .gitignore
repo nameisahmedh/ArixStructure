@@ -41,6 +41,12 @@ env/
 ENV/
 .venv/
 .ENV/
+Scripts/
+Lib/
+Include/
+share/
+etc/
+pyvenv.cfg
 
 # IDE
 .vscode/
