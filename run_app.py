@@ -22,7 +22,7 @@ def check_dependencies():
     """Check if required packages are installed."""
     required_packages = [
         'streamlit', 'pandas', 'pdfplumber', 'fitz', 'PIL', 
-        'docx', 'pptx', 'bs4', 'huggingface_hub', 'requests'
+        'docx', 'pptx', 'bs4', 'huggingface_hub', 'requests', 'plotly'
     ]
     
     missing_packages = []
@@ -86,16 +86,11 @@ def create_temp_directory():
     else:
         print("✅ temp_images directory exists")
 
-def launch_app(app_file="app_improved.py"):
+def launch_app(app_file="app.py"):
     """Launch the Streamlit application."""
     if not os.path.exists(app_file):
         print(f"❌ Application file not found: {app_file}")
-        if os.path.exists("app.py"):
-            print("📝 Falling back to app.py")
-            app_file = "app.py"
-        else:
-            print("❌ No application file found!")
-            return False
+        return False
     
     print(f"\n🚀 Launching {app_file}...")
     print("📝 The application will open in your default web browser")
@@ -137,20 +132,8 @@ def main():
     
     print("\n✅ All checks passed!")
     
-    # Ask user which version to run
-    print("\n📋 Available applications:")
-    print("1. app_improved.py (Recommended - Enhanced UI)")
-    print("2. app.py (Original version)")
-    
-    choice = input("\nSelect application (1 or 2, default=1): ").strip()
-    
-    if choice == "2":
-        app_file = "app.py"
-    else:
-        app_file = "app_improved.py"
-    
     # Launch the application
-    launch_app(app_file)
+    launch_app("app.py")
 
 if __name__ == "__main__":
     main()

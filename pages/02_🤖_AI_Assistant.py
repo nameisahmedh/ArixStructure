@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import sys
-sys.path.append('..')
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import get_theme_css, init_session_state
 import llm_handler
 
@@ -259,6 +260,41 @@ if st.session_state.doc_data:
             st.markdown(f"**❓ Your Question:** {user_question}")
             st.markdown(f"**💡 AI Answer:** {results['content']}")
             
+            # AI Response Export Options
+            st.markdown("#### 📥 Export AI Response")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # Download AI response as text
+                response_text = f"Question: {user_question}\n\nAnswer: {results['content']}"
+                st.download_button(
+                    "📄 Download Response",
+                    data=response_text,
+                    file_name="ai_response.txt",
+                    mime="text/plain"
+                )
+            
+            with col2:
+                # Copy AI response
+                if st.button("📋 Copy Response"):
+                    st.code(response_text, language="text")
+            
+            with col3:
+                # Download as JSON
+                response_json = {
+                    "question": user_question,
+                    "answer": results['content'],
+                    "timestamp": pd.Timestamp.now().isoformat(),
+                    "type": results['type']
+                }
+                import json
+                st.download_button(
+                    "📄 Download JSON",
+                    data=json.dumps(response_json, indent=2),
+                    file_name="ai_response.json",
+                    mime="application/json"
+                )
+            
             # Display retrieved content
             if results['type'] == 'table' and results['tables']:
                 st.markdown("**📊 Retrieved Tables:**")
@@ -274,7 +310,8 @@ if st.session_state.doc_data:
                             "📥 Download CSV",
                             data=csv_data,
                             file_name=f"table_{i+1}.csv",
-                            mime="text/csv"
+                            mime="text/csv",
+                            key=f"csv_{i}"
                         )
                     with col2:
                         json_data = df.to_json(orient='records', indent=2).encode('utf-8')
@@ -282,7 +319,8 @@ if st.session_state.doc_data:
                             "📥 Download JSON",
                             data=json_data,
                             file_name=f"table_{i+1}.json",
-                            mime="application/json"
+                            mime="application/json",
+                            key=f"json_{i}"
                         )
                     with col3:
                         if st.button(f"📋 Copy Table {i+1}", key=f"copy_{i}"):

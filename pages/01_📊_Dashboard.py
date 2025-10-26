@@ -4,7 +4,8 @@ import os
 import urllib.parse
 import requests
 import sys
-sys.path.append('..')
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import (
     get_theme_css, init_session_state,
     process_document_with_progress

@@ -1,6 +1,7 @@
 import streamlit as st
 import sys
-sys.path.append('..')
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import get_theme_css, init_session_state
 import pandas as pd
 import re

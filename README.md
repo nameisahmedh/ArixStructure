@@ -1,95 +1,126 @@
-# 🏗️ ArixStructure
+# ArixStructure - Document Structure Analyzer
 
-Transform Unstructured Data into Structured Intelligence
+Transform unstructured documents into structured, queryable data with AI-powered analysis.
 
-## 🚀 Features
+## Features
 
-- **🤖 AI-Powered Extraction**: Advanced AI algorithms automatically detect and extract text, tables, images, and metadata
-- **🏗️ Smart Data Structuring**: Convert unorganized data into clean, structured formats (JSON, CSV, Excel)
-- **📊 Interactive Analytics**: Generate beautiful visualizations and perform statistical analysis
-- **💬 Natural Language Queries**: Ask questions about your data in plain English
-- **📥 Multi-Format Export**: Export data and visualizations in multiple formats
+- 📄 **Multi-format Support**: PDF, Word, PowerPoint, HTML, CSV, TXT
+- 🏗️ **Smart Data Structuring**: Automatically extract tables, text, and images
+- 🤖 **AI Assistant**: Ask intelligent questions about your documents
+- 📊 **Data Visualization**: Create beautiful charts and graphs
+- 🖼️ **Image Analysis**: AI-powered image descriptions
+- 📝 **Text Analytics**: Deep text analysis with statistics
+- 📥 **Export Options**: Multiple formats (CSV, JSON, Excel, PDF)
 
-## 📋 Supported File Formats
+## Quick Start
 
-- **Documents**: PDF, Word (.docx), PowerPoint (.pptx)
-- **Web Content**: HTML pages, live URL fetching
-- **Data Files**: CSV, TXT files
-
-## 🛠️ Installation
-
-1. Clone the repository:
+### Option 1: Using the Batch File (Recommended)
 ```bash
-git clone https://github.com/nameisahmedh/ArixStructure.git
-cd ArixStructure
+# Double-click run.bat or run from command prompt
+run.bat
 ```
 
-2. Install dependencies:
+### Option 2: Using Python Launcher
 ```bash
+python start.py
+```
+
+### Option 3: Direct Streamlit Command
+```bash
+# Install dependencies first
 pip install -r requirements.txt
-```
 
-3. Set up your API keys:
-   - Create `.streamlit/secrets.toml` file
-   - Add your Hugging Face token:
-   ```toml
-   HF_TOKEN = "your_hugging_face_token_here"
-   ```
-
-4. Run the application:
-```bash
+# Run the application
 streamlit run app.py
 ```
 
-## 🎯 How It Works
+## Setup Instructions
 
-1. **📤 Upload**: Upload your unstructured document
-2. **🧠 Analyze**: AI analyzes and extracts content
-3. **🏗️ Structure**: Convert to organized data formats
-4. **📊 Visualize**: Create charts and insights
-5. **📥 Export**: Download in preferred formats
+1. **Clone or Download** the project to your local machine
 
-## 🔧 Configuration
+2. **Install Python 3.8+** if not already installed
 
-Create a `.streamlit/secrets.toml` file with your API credentials:
+3. **Configure Hugging Face Token**:
+   - Get a free token from [Hugging Face](https://huggingface.co/settings/tokens)
+   - Update `.streamlit/secrets.toml` with your token:
+     ```toml
+     HF_TOKEN = "your_token_here"
+     ```
 
-```toml
-HF_TOKEN = "your_hugging_face_token"
+4. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. **Run the Application**:
+   ```bash
+   streamlit run app.py
+   ```
+
+## Usage
+
+1. **Upload Document**: Go to Dashboard and upload your unstructured document
+2. **AI Analysis**: Use the AI Assistant to ask questions about your data
+3. **Visualize**: Create charts and graphs in the Analytics section
+4. **Explore Images**: View and analyze extracted images
+5. **Text Analysis**: Perform deep text analytics
+6. **Export**: Download your structured data in various formats
+
+## Supported File Types
+
+- **Documents**: PDF (.pdf), Word (.docx), PowerPoint (.pptx)
+- **Web**: HTML (.html, .htm), URLs
+- **Data**: CSV (.csv), Text (.txt)
+
+## Requirements
+
+- Python 3.8+
+- Streamlit
+- Required packages (see requirements.txt)
+- Hugging Face API token (free)
+
+## Troubleshooting
+
+### Common Issues:
+
+1. **Import Errors**: Make sure all dependencies are installed
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Hugging Face Token Error**: Ensure your token is correctly set in `.streamlit/secrets.toml`
+
+3. **File Upload Issues**: Check file format is supported and file isn't corrupted
+
+4. **Virtual Environment**: If using a virtual environment, make sure it's activated
+
+### Getting Help:
+
+- Check the console output for detailed error messages
+- Ensure all required packages are installed
+- Verify your Hugging Face token is valid
+
+## Project Structure
+
+```
+final_project/
+├── app.py                 # Main application
+├── utils.py              # Utility functions
+├── parser.py             # Document parsing logic
+├── llm_handler.py        # AI/LLM integration
+├── requirements.txt      # Dependencies
+├── start.py             # Python launcher
+├── run.bat              # Windows batch launcher
+├── .streamlit/
+│   └── secrets.toml     # Configuration
+└── pages/               # Streamlit pages
+    ├── 01_📊_Dashboard.py
+    ├── 02_🤖_AI_Assistant.py
+    ├── 03_📈_Analytics.py
+    ├── 04_🖼️_Images.py
+    └── 05_📝_Text_Analysis.py
 ```
 
-## 📱 Pages
+## License
 
-- **🏠 Home**: Welcome page and overview
-- **📊 Dashboard**: Document upload and processing
-- **🤖 AI Assistant**: Intelligent Q&A about your data
-- **📈 Analytics**: Data visualization and charts
-- **🖼️ Images**: Image gallery and analysis
-- **📝 Text Analysis**: Advanced text analytics
-
-## 🎨 Features
-
-- **Dark/Light Theme**: Toggle between themes
-- **Responsive Design**: Works on all screen sizes
-- **Real-time Processing**: Live document analysis
-- **Export Options**: Multiple format support
-- **Chat History**: Track your AI conversations
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 👨‍💻 Author
-
-Built with ❤️ by Ahmed Batch20
-
----
-
-**🏗️ ArixStructure** - Transforming Unstructured Data into Structured Intelligence
+This project is for educational and personal use.
