@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import numpy as np
 import sys
 import os
+from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import (
     get_theme_css, init_session_state,
@@ -68,8 +69,16 @@ def create_simple_visualization(df, chart_type, x_col, y_col=None, color_col=Non
             st.error("❌ No data available for visualization")
             return None, None
             
-        # Clean data
+        # Clean data and handle missing values
         df_clean = df.copy()
+        
+        # Convert numeric columns properly
+        for col in df_clean.columns:
+            if df_clean[col].dtype == 'object':
+                # Try to convert to numeric if possible
+                numeric_series = pd.to_numeric(df_clean[col], errors='coerce')
+                if not numeric_series.isna().all():
+                    df_clean[col] = numeric_series
         
         # Set theme
         template = "plotly_dark" if st.session_state.theme_mode == 'dark' else "plotly_white"
@@ -78,20 +87,59 @@ def create_simple_visualization(df, chart_type, x_col, y_col=None, color_col=Non
         def format_title(col):
             return str(col).replace('_', ' ').title()
         
+        # Helper function to get data range with padding
+        def get_axis_range(data, padding=0.1):
+            if pd.api.types.is_numeric_dtype(data):
+                data_clean = data.dropna()
+                if len(data_clean) > 0:
+                    min_val = data_clean.min()
+                    max_val = data_clean.max()
+                    range_size = max_val - min_val
+                    if range_size > 0:
+                        return [min_val - range_size * padding, max_val + range_size * padding]
+            return None
+        
         # Create visualizations with proper axis handling
         if chart_type == "Bar Chart":
             if y_col and y_col in df_clean.columns:
-                fig = px.bar(df_clean, x=x_col, y=y_col, color=color_col, title=title)
+                # Remove rows with NaN values in key columns
+                df_plot = df_clean.dropna(subset=[x_col, y_col])
+                fig = px.bar(df_plot, x=x_col, y=y_col, color=color_col, title=title)
+                
+                # Set custom y-axis range
+                y_range = get_axis_range(df_plot[y_col])
+                if y_range:
+                    fig.update_yaxes(range=y_range)
             else:
-                fig = px.bar(df_clean, x=x_col, title=title)
+                df_plot = df_clean.dropna(subset=[x_col])
+                value_counts = df_plot[x_col].value_counts()
+                fig = px.bar(x=value_counts.index, y=value_counts.values, title=title)
+                fig.update_xaxes(title=format_title(x_col))
+                fig.update_yaxes(title="Count")
+                
+                # Set custom y-axis range for counts
+                y_range = get_axis_range(pd.Series(value_counts.values))
+                if y_range:
+                    fig.update_yaxes(range=y_range)
+            
             fig.update_xaxes(title=format_title(x_col))
             if y_col:
                 fig.update_yaxes(title=format_title(y_col))
-                
 
         elif chart_type == "Line Chart":
             if y_col and y_col in df_clean.columns:
-                fig = px.line(df_clean, x=x_col, y=y_col, color=color_col, title=title)
+                df_plot = df_clean.dropna(subset=[x_col, y_col])
+                fig = px.line(df_plot, x=x_col, y=y_col, color=color_col, title=title)
+                
+                # Set custom axis ranges
+                x_range = get_axis_range(df_plot[x_col])
+                y_range = get_axis_range(df_plot[y_col])
+                
+                if x_range:
+                    fig.update_xaxes(range=x_range)
+                if y_range:
+                    fig.update_yaxes(range=y_range)
+                    
                 fig.update_xaxes(title=format_title(x_col))
                 fig.update_yaxes(title=format_title(y_col))
             else:
@@ -100,7 +148,18 @@ def create_simple_visualization(df, chart_type, x_col, y_col=None, color_col=Non
 
         elif chart_type == "Scatter Plot":
             if y_col and y_col in df_clean.columns:
-                fig = px.scatter(df_clean, x=x_col, y=y_col, color=color_col, title=title)
+                df_plot = df_clean.dropna(subset=[x_col, y_col])
+                fig = px.scatter(df_plot, x=x_col, y=y_col, color=color_col, title=title)
+                
+                # Set custom axis ranges
+                x_range = get_axis_range(df_plot[x_col])
+                y_range = get_axis_range(df_plot[y_col])
+                
+                if x_range:
+                    fig.update_xaxes(range=x_range)
+                if y_range:
+                    fig.update_yaxes(range=y_range)
+                    
                 fig.update_xaxes(title=format_title(x_col))
                 fig.update_yaxes(title=format_title(y_col))
             else:
@@ -109,37 +168,182 @@ def create_simple_visualization(df, chart_type, x_col, y_col=None, color_col=Non
 
         elif chart_type == "Pie Chart":
             if y_col and y_col in df_clean.columns:
-                pie_data = df_clean.groupby(x_col)[y_col].sum().head(10)
-                fig = px.pie(values=pie_data.values, names=pie_data.index, title=title)
+                df_plot = df_clean.dropna(subset=[x_col, y_col])
+                pie_data = df_plot.groupby(x_col)[y_col].sum().head(10)
+                # Filter out zero or negative values for pie chart
+                pie_data = pie_data[pie_data > 0]
+                if len(pie_data) > 0:
+                    fig = px.pie(values=pie_data.values, names=pie_data.index, title=title)
+                else:
+                    st.error("❌ No positive values found for pie chart")
+                    return None, None
             else:
-                value_counts = df_clean[x_col].value_counts().head(10)
+                df_plot = df_clean.dropna(subset=[x_col])
+                value_counts = df_plot[x_col].value_counts().head(10)
                 fig = px.pie(values=value_counts.values, names=value_counts.index, title=title)
 
         elif chart_type == "Histogram":
-            fig = px.histogram(df_clean, x=x_col, title=title, color=color_col)
+            df_plot = df_clean.dropna(subset=[x_col])
+            if pd.api.types.is_numeric_dtype(df_plot[x_col]):
+                # Calculate optimal number of bins
+                n_bins = min(50, max(10, int(np.sqrt(len(df_plot)))))
+                fig = px.histogram(df_plot, x=x_col, title=title, color=color_col, nbins=n_bins)
+                
+                # Set custom x-axis range
+                x_range = get_axis_range(df_plot[x_col])
+                if x_range:
+                    fig.update_xaxes(range=x_range)
+            else:
+                fig = px.histogram(df_plot, x=x_col, title=title, color=color_col)
+                
             fig.update_xaxes(title=format_title(x_col))
             fig.update_yaxes(title="Frequency")
+            
         elif chart_type == "Box Plot":
             if y_col and y_col in df_clean.columns:
-                fig = px.box(df_clean, x=x_col, y=y_col, color=color_col, title=title)
+                df_plot = df_clean.dropna(subset=[x_col, y_col])
+                fig = px.box(df_plot, x=x_col, y=y_col, color=color_col, title=title)
+                
+                # Set custom y-axis range
+                y_range = get_axis_range(df_plot[y_col])
+                if y_range:
+                    fig.update_yaxes(range=y_range)
+                    
                 fig.update_xaxes(title=format_title(x_col))
                 fig.update_yaxes(title=format_title(y_col))
             else:
-                fig = px.box(df_clean, y=x_col, title=title)
-                fig.update_yaxes(title=format_title(x_col))
+                df_plot = df_clean.dropna(subset=[x_col])
+                if pd.api.types.is_numeric_dtype(df_plot[x_col]):
+                    fig = px.box(df_plot, y=x_col, title=title)
+                    
+                    # Set custom y-axis range
+                    y_range = get_axis_range(df_plot[x_col])
+                    if y_range:
+                        fig.update_yaxes(range=y_range)
+                        
+                    fig.update_yaxes(title=format_title(x_col))
+                else:
+                    st.error("❌ Box plot requires numeric data")
+                    return None, None
 
+        elif chart_type == "Heatmap":
+            numeric_cols = df_clean.select_dtypes(include=[np.number]).columns
+            if len(numeric_cols) >= 2:
+                df_numeric = df_clean[numeric_cols].dropna()
+                if len(df_numeric) > 1:
+                    corr_matrix = df_numeric.corr()
+                    fig = px.imshow(
+                        corr_matrix, 
+                        text_auto='.2f', 
+                        title=title,
+                        color_continuous_scale='RdBu_r',
+                        zmin=-1, zmax=1
+                    )
+                    fig.update_xaxes(title="Variables")
+                    fig.update_yaxes(title="Variables")
+                else:
+                    st.error("❌ Not enough data for heatmap")
+                    return None, None
+            else:
+                st.error("❌ Heatmap requires at least 2 numeric columns")
+                return None, None
 
+        elif chart_type == "Area Chart":
+            if y_col and y_col in df_clean.columns:
+                df_plot = df_clean.dropna(subset=[x_col, y_col])
+                fig = px.area(df_plot, x=x_col, y=y_col, color=color_col, title=title)
+                
+                x_range = get_axis_range(df_plot[x_col])
+                y_range = get_axis_range(df_plot[y_col])
+                
+                if x_range:
+                    fig.update_xaxes(range=x_range)
+                if y_range:
+                    fig.update_yaxes(range=y_range)
+                    
+                fig.update_xaxes(title=format_title(x_col))
+                fig.update_yaxes(title=format_title(y_col))
+            else:
+                st.error("❌ Area chart requires both X and Y columns")
+                return None, None
+
+        elif chart_type == "Violin Plot":
+            if y_col and y_col in df_clean.columns:
+                df_plot = df_clean.dropna(subset=[x_col, y_col])
+                fig = px.violin(df_plot, x=x_col, y=y_col, color=color_col, title=title)
+                
+                y_range = get_axis_range(df_plot[y_col])
+                if y_range:
+                    fig.update_yaxes(range=y_range)
+                    
+                fig.update_xaxes(title=format_title(x_col))
+                fig.update_yaxes(title=format_title(y_col))
+            else:
+                df_plot = df_clean.dropna(subset=[x_col])
+                if pd.api.types.is_numeric_dtype(df_plot[x_col]):
+                    fig = px.violin(df_plot, y=x_col, title=title)
+                    
+                    y_range = get_axis_range(df_plot[x_col])
+                    if y_range:
+                        fig.update_yaxes(range=y_range)
+                        
+                    fig.update_yaxes(title=format_title(x_col))
+                else:
+                    st.error("❌ Violin plot requires numeric data")
+                    return None, None
+
+        elif chart_type == "Sunburst":
+            if color_col and color_col in df_clean.columns:
+                df_plot = df_clean.dropna(subset=[x_col, color_col])
+                if y_col and y_col in df_plot.columns:
+                    fig = px.sunburst(df_plot, path=[x_col, color_col], values=y_col, title=title)
+                else:
+                    value_counts = df_plot.groupby([x_col, color_col]).size().reset_index(name='count')
+                    fig = px.sunburst(value_counts, path=[x_col, color_col], values='count', title=title)
+            else:
+                st.error("❌ Sunburst chart requires a hierarchy column")
+                return None, None
 
         else:
             st.error("❌ Unsupported chart type")
             return None, None
         
-        # Apply styling
+        # Apply enhanced styling
         fig.update_layout(
             template=template,
-            title=title,
-            height=500,
-            showlegend=True if color_col else False
+            title={
+                'text': title,
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 18, 'family': 'Poppins'}
+            },
+            height=600,
+            showlegend=True if color_col else False,
+            font={'family': 'Poppins'},
+            margin=dict(l=60, r=60, t=80, b=60),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        
+        # Enhanced axis styling
+        fig.update_xaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(128,128,128,0.2)',
+            showline=True,
+            linewidth=1,
+            linecolor='rgba(128,128,128,0.5)',
+            title_font={'size': 14, 'family': 'Poppins'}
+        )
+        
+        fig.update_yaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(128,128,128,0.2)',
+            showline=True,
+            linewidth=1,
+            linecolor='rgba(128,128,128,0.5)',
+            title_font={'size': 14, 'family': 'Poppins'}
         )
         
         return fig, {}
@@ -209,11 +413,108 @@ if st.session_state.doc_data:
             categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
             st.metric("📝 Text Columns", len(categorical_cols))
         
+        # AI Column Extraction
+        st.markdown("### 🤖 AI Column Extraction")
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            extraction_query = st.text_input(
+                "🔍 Describe what columns you want to extract:",
+                placeholder="e.g., 'extract all columns related to sales and revenue' or 'find columns with dates'"
+            )
+        
+        with col2:
+            if st.button("🤖 Extract Columns", use_container_width=True):
+                if extraction_query:
+                    with st.spinner("🤖 AI analyzing columns..."):
+                        try:
+                            from llm_handler import get_text_response
+                            
+                            column_info = []
+                            for col in df.columns:
+                                sample_values = df[col].dropna().head(3).tolist()
+                                col_type = str(df[col].dtype)
+                                column_info.append(f"Column: {col}, Type: {col_type}, Sample: {sample_values}")
+                            
+                            context = chr(10).join(column_info)
+                            prompt = f"Based on this user request: '{extraction_query}', analyze these columns and return ONLY the column names that match the request, separated by commas. Return format: column1,column2,column3 (no spaces, no explanations)"
+                            
+                            response = get_text_response(prompt, context)
+                            
+                            if response:
+                                st.write(f"AI Response: {response}")
+                                
+                                import re
+                                clean_response = re.sub(r'[^a-zA-Z0-9,\s_-]', '', response)
+                                potential_cols = [col.strip() for col in clean_response.split(',')]
+                                
+                                suggested_cols = []
+                                available_cols = df.columns.tolist()
+                                
+                                for pot_col in potential_cols:
+                                    if pot_col:
+                                        if pot_col in available_cols:
+                                            suggested_cols.append(pot_col)
+                                        else:
+                                            for actual_col in available_cols:
+                                                if pot_col.lower() == actual_col.lower():
+                                                    suggested_cols.append(actual_col)
+                                                    break
+                                            else:
+                                                for actual_col in available_cols:
+                                                    if pot_col.lower() in actual_col.lower() or actual_col.lower() in pot_col.lower():
+                                                        suggested_cols.append(actual_col)
+                                                        break
+                                
+                                suggested_cols = list(set(suggested_cols))
+                                
+                                if suggested_cols:
+                                    st.success(f"🎯 AI found {len(suggested_cols)} matching columns: {', '.join(suggested_cols)}")
+                                    
+                                    extracted_df = df[suggested_cols]
+                                    st.dataframe(extracted_df.head(10), use_container_width=True)
+                                    
+                                    col_a, col_b, col_c = st.columns(3)
+                                    with col_a:
+                                        csv_data = extracted_df.to_csv(index=False).encode('utf-8')
+                                        st.download_button(
+                                            "📊 Download CSV",
+                                            data=csv_data,
+                                            file_name=f"extracted_columns.csv",
+                                            mime="text/csv"
+                                        )
+                                    with col_b:
+                                        json_data = extracted_df.to_json(orient='records', indent=2).encode('utf-8')
+                                        st.download_button(
+                                            "📄 Download JSON",
+                                            data=json_data,
+                                            file_name=f"extracted_columns.json",
+                                            mime="application/json"
+                                        )
+                                    with col_c:
+                                        if st.button("📈 Visualize Extracted Data"):
+                                            st.session_state['extracted_df'] = extracted_df
+                                            st.info("✅ Use the extracted columns in the visualization builder below")
+                                else:
+                                    st.warning(f"❌ No matching columns found. Available: {', '.join(available_cols)}")
+                                    st.write(f"Parsed: {potential_cols}")
+                            else:
+                                st.error("❌ AI analysis failed")
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
+                else:
+                    st.warning("Please enter a description of what columns to extract")
+        
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Visualization builder
         st.markdown('<div class="content-card">', unsafe_allow_html=True)
         st.markdown("### 🎨 Create Visualization")
+        
+        # Use extracted data if available
+        viz_df = st.session_state.get('extracted_df', df)
+        if 'extracted_df' in st.session_state:
+            st.info("🎯 Using AI-extracted columns for visualization")
         
         col1, col2 = st.columns([2, 1])
         
@@ -224,17 +525,17 @@ if st.session_state.doc_data:
             with col_a:
                 chart_type = st.selectbox(
                     "📊 Chart Type", 
-                    ["Bar Chart", "Line Chart", "Scatter Plot", "Pie Chart", "Histogram", "Box Plot"]
+                    ["Bar Chart", "Line Chart", "Scatter Plot", "Pie Chart", "Histogram", "Box Plot", "Heatmap", "Area Chart", "Violin Plot", "Sunburst"]
                 )
             
             with col_b:
-                x_column = st.selectbox("📐 X-Axis Column", df.columns.tolist())
+                x_column = st.selectbox("📐 X-Axis Column", viz_df.columns.tolist())
             
             # Y-axis selection based on chart type
             if chart_type in ["Line Chart", "Area Chart", "Scatter Plot", "Bubble Chart", "Box Plot", "Violin Plot"]:
-                y_column = st.selectbox("📏 Y-Axis Column", [None] + df.columns.tolist())
+                y_column = st.selectbox("📏 Y-Axis Column", [None] + viz_df.columns.tolist())
             elif chart_type in ["Bar Chart", "Horizontal Bar", "Pie Chart", "Donut Chart", "Sunburst"]:
-                y_column = st.selectbox("📏 Y-Axis Column (Optional)", [None] + df.columns.tolist())
+                y_column = st.selectbox("📏 Y-Axis Column (Optional)", [None] + viz_df.columns.tolist())
             elif chart_type == "Heatmap":
                 y_column = None
                 st.info("💡 Heatmap will show correlations between all numeric columns")
@@ -243,9 +544,9 @@ if st.session_state.doc_data:
             
             # Color column (optional)
             if chart_type == "Sunburst":
-                color_column = st.selectbox("🎨 Hierarchy Column (Required)", [None] + df.columns.tolist())
+                color_column = st.selectbox("🎨 Hierarchy Column (Required)", [None] + viz_df.columns.tolist())
             else:
-                color_column = st.selectbox("🎨 Color By (Optional)", [None] + df.columns.tolist())
+                color_column = st.selectbox("🎨 Color By (Optional)", [None] + viz_df.columns.tolist())
             
             # Chart title with better default
             if y_column and y_column != "None" and y_column is not None:
@@ -279,7 +580,7 @@ if st.session_state.doc_data:
         if st.button("🎨 Generate Visualization", use_container_width=True, type="primary"):
             with st.spinner("🎨 Creating visualization..."):
                 result = create_simple_visualization(
-                    df, chart_type, x_column, y_column, 
+                    viz_df, chart_type, x_column, y_column, 
                     color_column if color_column and color_column not in ["None", None] else None, 
                     chart_title
                 )
@@ -293,17 +594,17 @@ if st.session_state.doc_data:
                     # Interactive features info
                     st.info("🎯 **Interactive Features**: Zoom, Pan, Select, Download, Reset, Hover for details")
                     
-                    # Export and data options
-                    st.markdown("#### 📥 Export & Data Options")
+                    # Export and analysis options
+                    st.markdown("#### 📥 Export & Analysis Options")
                     
-                    col1, col2, col3, col4 = st.columns(4)
+                    col1, col2, col3, col4, col5 = st.columns(5)
                     
                     with col1:
                         # Image export
                         img_bytes, filepath = save_plot_as_image(fig, f"chart_{selected_idx+1}", export_format.lower())
                         if img_bytes:
                             st.download_button(
-                                f"📥 {export_format} Image",
+                                f"📥 {export_format}",
                                 data=img_bytes,
                                 file_name=f"{chart_title.replace(' ', '_')}.{export_format.lower()}",
                                 mime=f"image/{export_format.lower()}"
@@ -313,37 +614,69 @@ if st.session_state.doc_data:
                         # HTML export
                         html_str = fig.to_html(include_plotlyjs='cdn', config=config)
                         st.download_button(
-                            "🌐 Interactive HTML",
+                            "🌐 HTML",
                             data=html_str,
                             file_name=f"{chart_title.replace(' ', '_')}.html",
                             mime="text/html"
                         )
                     
                     with col3:
+                        # Analysis Report
+                        chart_cols = [col for col in [x_column, y_column, color_column] if col and col not in ["None", None]]
+                        if chart_cols:
+                            chart_data = df[chart_cols].copy()
+                            analysis_text = f"""CHART ANALYSIS REPORT
+
+Chart Title: {chart_title}
+Chart Type: {chart_type}
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+DATA SUMMARY:
+Total Records: {len(chart_data)}
+Columns Analyzed: {', '.join(chart_cols)}
+
+STATISTICAL SUMMARY:
+{chart_data.describe().to_string() if not chart_data.select_dtypes(include=[np.number]).empty else 'No numeric data for statistics'}
+
+DATA PREVIEW:
+{chart_data.head(20).to_string(index=False)}
+"""
+                            st.download_button(
+                                "📄 Report",
+                                data=analysis_text.encode('utf-8'),
+                                file_name=f"{chart_title.replace(' ', '_')}_analysis.txt",
+                                mime="text/plain"
+                            )
+                    
+                    with col4:
+                        # Data export
+                        if chart_cols:
+                            chart_data = df[chart_cols].copy()
+                            csv_data = chart_data.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                "📊 Data CSV",
+                                data=csv_data,
+                                file_name=f"{chart_title.replace(' ', '_')}_data.csv",
+                                mime="text/csv"
+                            )
+                    
+                    with col5:
                         # JSON export
                         json_str = fig.to_json()
                         st.download_button(
-                            "📄 Chart JSON",
+                            "📄 JSON",
                             data=json_str,
                             file_name=f"{chart_title.replace(' ', '_')}.json",
                             mime="application/json"
                         )
                     
-                    with col4:
-                        # Copy chart data
-                        if st.button("📋 Copy Chart Data", key="copy_chart_data"):
-                            chart_cols = [col for col in [x_column, y_column, color_column] if col and col not in ["None", None]]
-                            if chart_cols:
-                                chart_data = df[chart_cols].copy()
-                                st.code(chart_data.to_string(index=False), language="text")
-                    
                     # Data summary for the chart
                     with st.expander("📊 Chart Data Summary", expanded=False):
                         chart_cols = [col for col in [x_column, y_column, color_column] if col and col not in ["None", None]]
                         if chart_cols:
-                            chart_data = df[chart_cols]
+                            chart_data = viz_df[chart_cols]
                         else:
-                            chart_data = df[[x_column]]
+                            chart_data = viz_df[[x_column]]
                         
                         col1, col2 = st.columns(2)
                         with col1:
@@ -360,61 +693,7 @@ if st.session_state.doc_data:
         
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Quick chart templates
-        st.markdown('<div class="content-card">', unsafe_allow_html=True)
-        st.markdown("### ⚡ Quick Chart Templates")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            if st.button("📊 Quick Bar Chart", use_container_width=True):
-                if len(df.columns) >= 1:
-                    try:
-                        fig = px.bar(df, x=df.columns[0], title=f"{df.columns[0]} Distribution")
-                        fig.update_layout(template="plotly_dark" if st.session_state.theme_mode == 'dark' else "plotly_white")
-                        st.plotly_chart(fig, use_container_width=True)
-                    except Exception as e:
-                        st.error(f"Error creating bar chart: {e}")
-        
-        with col2:
-            if st.button("📈 Quick Line Chart", use_container_width=True):
-                numeric_cols = df.select_dtypes(include=[np.number]).columns
-                if len(numeric_cols) >= 2:
-                    try:
-                        fig = px.line(df, x=numeric_cols[0], y=numeric_cols[1], title=f"{numeric_cols[1]} vs {numeric_cols[0]}")
-                        fig.update_layout(template="plotly_dark" if st.session_state.theme_mode == 'dark' else "plotly_white")
-                        st.plotly_chart(fig, use_container_width=True)
-                    except Exception as e:
-                        st.error(f"Error creating line chart: {e}")
-                else:
-                    st.info("Need at least 2 numeric columns for line chart")
-        
-        with col3:
-            if st.button("🥧 Quick Pie Chart", use_container_width=True):
-                if len(df.columns) >= 1:
-                    try:
-                        value_counts = df[df.columns[0]].value_counts().head(10)
-                        fig = px.pie(values=value_counts.values, names=value_counts.index, title=f"{df.columns[0]} Distribution")
-                        fig.update_layout(template="plotly_dark" if st.session_state.theme_mode == 'dark' else "plotly_white")
-                        st.plotly_chart(fig, use_container_width=True)
-                    except Exception as e:
-                        st.error(f"Error creating pie chart: {e}")
-        
-        with col4:
-            if st.button("🔥 Quick Heatmap", use_container_width=True):
-                numeric_cols = df.select_dtypes(include=[np.number]).columns
-                if len(numeric_cols) >= 2:
-                    try:
-                        corr_matrix = df[numeric_cols].corr()
-                        fig = px.imshow(corr_matrix, text_auto=True, title="Correlation Heatmap")
-                        fig.update_layout(template="plotly_dark" if st.session_state.theme_mode == 'dark' else "plotly_white")
-                        st.plotly_chart(fig, use_container_width=True)
-                    except Exception as e:
-                        st.error(f"Error creating heatmap: {e}")
-                else:
-                    st.info("Need at least 2 numeric columns for heatmap")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+
         
         # Data export
         st.markdown('<div class="content-card">', unsafe_allow_html=True)

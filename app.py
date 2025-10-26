@@ -53,13 +53,13 @@ st.divider()
 # Hero metrics
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric("⚡ Time Saved", "95%", help="Reduce processing time by 95%")
+    st.metric("⚡ Time Saved", "80%", help="Reduce manual data processing time")
 with col2:
-    st.metric("🚀 Processing Speed", "10x Faster", help="10x faster than manual processing")
+    st.metric("🚀 Processing Speed", "5x Faster", help="Faster than manual document analysis")
 with col3:
-    st.metric("📋 Supported Formats", "50+", help="Support for 50+ file formats")
+    st.metric("📋 Supported Formats", "6+", help="PDF, DOCX, PPTX, HTML, CSV, TXT")
 with col4:
-    st.metric("🎯 Accuracy Rate", "99.9%", help="99.9% accuracy in data extraction")
+    st.metric("🎯 Chart Types", "10+", help="Multiple visualization options available")
 
 st.divider()
 

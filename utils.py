@@ -843,12 +843,27 @@ def process_document_with_progress(file_bytes, filename):
         return None
 
 def save_plot_as_image(fig, filename, format="png"):
-    """Save plotly figure as image"""
+    """Save plotly figure as image with optimized settings"""
     try:
         if not os.path.exists("temp_plots"):
             os.makedirs("temp_plots")
         
-        img_bytes = fig.to_image(format=format, width=1200, height=800, scale=2)
+        # Optimize image settings based on format
+        if format.lower() in ['png', 'jpg', 'jpeg']:
+            width, height, scale = 1400, 900, 2
+        elif format.lower() == 'svg':
+            width, height, scale = 1200, 800, 1
+        else:
+            width, height, scale = 1200, 800, 2
+        
+        # Generate high-quality image
+        img_bytes = fig.to_image(
+            format=format, 
+            width=width, 
+            height=height, 
+            scale=scale,
+            engine="kaleido"
+        )
         
         filepath = f"temp_plots/{filename}.{format}"
         with open(filepath, "wb") as f:
