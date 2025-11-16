@@ -1,60 +1,49 @@
-# Environment variables and secrets
-.env
-.streamlit/secrets.toml
-*.key
-*.pem
-
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
-env/
-venv/
-.venv/
-*.egg-info/
-dist/
 build/
-.pytest_cache/
-.coverage
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Temporary files
-temp_images/
-temp_plots/
-*.tmp
-*.temp
+# Virtual Environment
+venv/
+env/
+ENV/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-.spyderproject
-.spyproject
+
+# Secrets and Environment
+.env
+.streamlit/secrets.toml
+
+# Temporary Files
+temp_images/
+temp_plots/
+*.tmp
+*.log
 
 # OS
 .DS_Store
 Thumbs.db
-ehthumbs.db
-Desktop.ini
 
-# Logs
-*.log
-logs/
-
-# Virtual environment (if created in project)
-Lib/
-Include/
-Scripts/
-share/
-etc/
-pyvenv.cfg
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
+# Streamlit
+.streamlit/secrets.toml

@@ -12,7 +12,7 @@ st.set_page_config(
 init_session_state()
 st.markdown(get_theme_css(), unsafe_allow_html=True)
 
-# Theme toggle
+# Theme toggle and status
 with st.sidebar:
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -21,6 +21,18 @@ with st.sidebar:
         if st.button("🌓", help="Toggle dark/light theme"):
             st.session_state.theme_mode = 'dark' if st.session_state.theme_mode == 'light' else 'light'
             st.rerun()
+    
+    # HF Token status
+    try:
+        import os
+        hf_token = st.secrets.get("HF_TOKEN") or os.getenv("HF_TOKEN")
+        if hf_token and hf_token.startswith('hf_'):
+            st.success("🤖 AI Features: Active")
+        else:
+            st.warning("⚠️ AI Features: Limited")
+            st.caption("Configure HF_TOKEN for full AI capabilities")
+    except:
+        st.info("ℹ️ AI Status: Unknown")
 
 # Main header
 st.markdown("""

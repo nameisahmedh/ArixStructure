@@ -89,8 +89,8 @@ if st.session_state.doc_data:
             for img_path in valid_images:
                 try:
                     total_size += os.path.getsize(img_path)
-                except:
-                    pass
+                except (OSError, FileNotFoundError):
+                    pass  # Skip files that can't be accessed
             st.metric("💾 Total Size", f"{total_size / 1024:.1f} KB")
         
         with col4:
@@ -170,10 +170,10 @@ if st.session_state.doc_data:
                                     key=f"download_{i}_{j}",
                                     use_container_width=True
                                 )
-                            except Exception as e:
+                            except (OSError, FileNotFoundError) as e:
                                 st.error(f"❌ Download error: {str(e)[:50]}")
                             
-                        except Exception as e:
+                        except (OSError, FileNotFoundError, IOError) as e:
                             st.error(f"❌ Error loading image: {str(e)[:100]}")
                         
                         st.markdown('</div>', unsafe_allow_html=True)
@@ -208,9 +208,12 @@ if st.session_state.doc_data:
                             use_container_width=True
                         )
                         
-                        os.unlink(tmp_file.name)
+                        try:
+                            os.unlink(tmp_file.name)
+                        except OSError:
+                            pass  # File already deleted
                         
-                except Exception as e:
+                except (OSError, zipfile.BadZipFile, IOError) as e:
                     st.error(f"❌ Error creating ZIP file: {str(e)[:100]}")
 
 else:

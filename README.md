@@ -1,41 +1,39 @@
-# ArixStructure - Transform Unstructured Data
+# ArixStructure - AI-Powered Document Analyzer
 
-ArixStructure is a powerful Streamlit application that transforms unstructured documents into structured, queryable data using AI-powered analysis.
+Transform unstructured documents into structured, queryable data using advanced AI technology.
 
 ## 🚀 Features
 
 - **Multi-Format Support**: PDF, DOCX, PPTX, HTML, CSV, TXT
 - **AI-Powered Analysis**: Intelligent content extraction and structuring
 - **Interactive Visualizations**: 10+ chart types with Plotly
-- **Smart Column Extraction**: AI identifies relevant data columns
+- **Smart Image Extraction**: Extract and analyze images from documents
 - **Export Options**: Multiple formats (CSV, JSON, Excel, PDF, HTML)
 - **Dark/Light Theme**: Responsive design with theme toggle
 
 ## 📋 Requirements
 
 - Python 3.8+
-- Streamlit
-- Required packages (see requirements.txt)
+- Hugging Face API Token (free)
 
-## 🛠️ Installation
+## 🛠️ Quick Setup
 
-1. Clone the repository:
+### 1. Clone & Install
 ```bash
 git clone <your-repo-url>
 cd final_project
-```
-
-2. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-3. Set up your Hugging Face token:
-   - Copy `.env.example` to `.env`
-   - Add your HF token: `HF_TOKEN=your_token_here`
-   - Or add it to `.streamlit/secrets.toml`
+### 2. Configure Hugging Face Token
+Create `.streamlit/secrets.toml`:
+```toml
+HF_TOKEN = "your_hugging_face_token_here"
+```
 
-4. Run the application:
+**Get your free token at:** https://huggingface.co/settings/tokens
+
+### 3. Run Application
 ```bash
 streamlit run app.py
 ```
@@ -55,49 +53,89 @@ final_project/
 ├── llm_handler.py         # AI/LLM integration
 ├── utils.py               # Utility functions
 ├── requirements.txt       # Dependencies
-└── .streamlit/           # Streamlit configuration
-    └── config.toml
+└── .streamlit/           # Configuration
+    ├── config.toml
+    └── secrets.toml      # Your HF token here
 ```
-
-## 🔧 Configuration
-
-### Environment Variables
-- `HF_TOKEN`: Your Hugging Face API token
-
-### Streamlit Config
-The app includes optimized Streamlit configuration for performance and security.
 
 ## 🎯 Usage
 
-1. **Upload Document**: Use the Dashboard to upload your unstructured file
-2. **AI Analysis**: The system automatically extracts and structures content
-3. **Explore Data**: Use AI Assistant to query your data
-4. **Create Visualizations**: Generate charts and graphs in Analytics
+1. **Upload Document**: Use Dashboard to upload files
+2. **AI Analysis**: Automatic content extraction and structuring
+3. **Explore Data**: Query data with AI Assistant
+4. **Create Visualizations**: Generate charts in Analytics
 5. **Export Results**: Download in multiple formats
+
+## 🔧 Configuration
+
+### Hugging Face Token Setup
+1. Visit https://huggingface.co/settings/tokens
+2. Create a new token (read access is sufficient)
+3. Add to `.streamlit/secrets.toml`:
+   ```toml
+   HF_TOKEN = "hf_your_token_here"
+   ```
+
+### Alternative: Environment Variable
+```bash
+export HF_TOKEN="your_token_here"
+```
+
+## 📊 Supported Formats
+
+| Type | Extensions | Features |
+|------|------------|----------|
+| **Documents** | PDF, DOCX, PPTX | Text, tables, images |
+| **Web** | HTML, HTM | Content, embedded images |
+| **Data** | CSV, TXT | Structured data detection |
+
+## 🚀 Quick Start Scripts
+
+### Windows
+```bash
+python start.py
+```
+
+### Advanced Setup
+```bash
+python run_app.py
+```
 
 ## 🔒 Security
 
-- API tokens are managed securely via environment variables
-- URL validation prevents SSRF attacks
-- Input sanitization and validation throughout
-- No sensitive data is committed to version control
+- API tokens managed via environment variables
+- Input validation and sanitization
+- Path traversal protection
+- No sensitive data in version control
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
+2. Create feature branch
+3. Make changes
 4. Test thoroughly
-5. Submit a pull request
+5. Submit pull request
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+MIT License - see LICENSE file for details.
 
-## 🆘 Support
+## 🆘 Troubleshooting
 
-For issues and questions, please create an issue in the repository.
+### Common Issues
+
+**"HF_TOKEN not found"**
+- Ensure `.streamlit/secrets.toml` exists with your token
+
+**"Module not found"**
+- Run: `pip install -r requirements.txt`
+
+**"Image extraction failed"**
+- Install additional dependencies: `pip install kaleido`
+
+### Support
+Create an issue in the repository for help.
 
 ---
 
-Built with ❤️ using Streamlit, Plotly, and AI
+**Built with ❤️ using Streamlit, AI, and Python**

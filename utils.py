@@ -35,9 +35,9 @@ def init_theme_mode():
 # Only initialize if streamlit is available
 try:
     init_theme_mode()
-except Exception:
-    # Silently handle theme initialization errors
-    pass
+except (AttributeError, KeyError) as e:
+    # Handle theme initialization errors
+    print(f"Warning: Theme initialization failed: {e}")
 
 def get_theme_css():
     """Consistent CSS with Poppins font for all pages"""
@@ -1024,7 +1024,8 @@ def clear_temp_folder():
             if os.path.exists(folder):
                 shutil.rmtree(folder)
             os.makedirs(folder, exist_ok=True)
-    except Exception as e:
+    except (OSError, PermissionError) as e:
+        logger.error(f"Error clearing temp folder: {e}")
         st.error(f"❌ Error clearing temp folder: {e}")
 
 def process_document_with_progress(file_bytes, filename):
@@ -1067,9 +1068,10 @@ def process_document_with_progress(file_bytes, filename):
         
         return doc_data
         
-    except Exception as e:
+    except (ImportError, AttributeError, IOError) as e:
         progress_bar.empty()
         status_text.empty()
+        logger.error(f"Error structuring document: {e}")
         st.error(f"❌ Error structuring document: {e}")
         return None
 
@@ -1093,7 +1095,7 @@ def safe_file_operation(file_path, operation):
             raise FileNotFoundError(f"File not found: {normalized_path}")
         
         return operation(normalized_path)
-    except Exception as e:
+    except (OSError, ValueError, FileNotFoundError) as e:
         logger.error(f"File operation failed: {str(e)}")
         st.error(f"File operation failed: {str(e)}")
         return None
@@ -1176,7 +1178,7 @@ def create_comprehensive_export(table, table_name="table"):
             "table_name": table_name,
             "rows": len(df),
             "columns": list(df.columns),
-            "structured_at": datetime.now().replace(microsecond=0).isoformat(),
+            "structured_at": datetime.now().replace(microsecond=0).isoformat() + "Z",
             "source": "ArixStructure"
         },
         "data": df.to_dict('records')

@@ -73,8 +73,8 @@ def check_secrets():
             else:
                 print("❌ HF_TOKEN not found in secrets.toml")
                 return False
-    except Exception as e:
-        print("❌ Error reading secrets file")
+    except (IOError, OSError) as e:
+        print(f"❌ Error reading secrets file: {e}")
         return False
 
 def create_temp_directory():
@@ -105,8 +105,8 @@ def launch_app(app_file="app.py"):
     except FileNotFoundError:
         print("❌ Streamlit not found. Install it with: pip install streamlit")
         return False
-    except Exception:
-        print("❌ Unexpected error occurred while launching application")
+    except Exception as e:
+        print(f"❌ Unexpected error occurred while launching application: {e}")
         return False
     
     return True

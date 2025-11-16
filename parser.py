@@ -10,18 +10,18 @@ from bs4 import BeautifulSoup
 import csv
 import zipfile
 import base64
-from docx.document import Document
-from docx.oxml.table import CT_Tbl
-from docx.oxml.text.paragraph import CT_P
-from docx.table import _Cell, Table
-from docx.text.paragraph import Paragraph
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create a directory to store extracted images
 try:
     if not os.path.exists("temp_images"):
         os.makedirs("temp_images")
 except OSError as e:
-    print(f"Warning: Could not create temp_images directory: {e}")
+    logger.warning(f"Could not create temp_images directory: {e}")
 
 def clean_text(text):
     """Cleans up extracted text."""
@@ -31,26 +31,23 @@ def clean_text(text):
     return text
 
 def parse_document(file_bytes, filename):
-    """
-    Main router function that parses a file from bytes and extracts content 
-    based on its extension with enhanced data structuring capabilities.
-    """
+    """Main router function that parses a file from bytes and extracts content."""
     extension = os.path.splitext(filename)[1].lower()
     
-    if extension == '.pdf':
-        return _parse_pdf(file_bytes)
-    elif extension == '.docx':
-        return _parse_docx(file_bytes)
-    elif extension == '.pptx':
-        return _parse_pptx(file_bytes)
-    elif extension == '.txt':
-        return _parse_txt(file_bytes)
-    elif extension in ['.html', '.htm']:
-        return _parse_html(file_bytes)
-    elif extension == '.csv':
-        return _parse_csv(file_bytes)
+    parsers = {
+        '.pdf': _parse_pdf,
+        '.docx': _parse_docx,
+        '.pptx': _parse_pptx,
+        '.txt': _parse_txt,
+        '.html': _parse_html,
+        '.htm': _parse_html,
+        '.csv': _parse_csv
+    }
+    
+    if extension in parsers:
+        return parsers[extension](file_bytes)
     else:
-        print(f"Unsupported file type: {extension}")
+        logger.error(f"Unsupported file type: {extension}")
         return {
             "full_text": f"Error: Unsupported file type '{extension}'. Please upload a supported file format.",
             "tables": [],
@@ -68,7 +65,7 @@ def _parse_pdf(file_bytes):
     try:
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
             metadata["pages"] = len(pdf.pages)
-            print(f"Parsing {len(pdf.pages)} pages...")
+            logger.info(f"Parsing {len(pdf.pages)} pages...")
             
             for i, page in enumerate(pdf.pages):
                 page_text = page.extract_text()
@@ -87,10 +84,10 @@ def _parse_pdf(file_bytes):
                         all_tables.append(clean_table)
 
     except (FileNotFoundError, PermissionError) as e:
-        print(f"File access error with pdfplumber: {e}")
+        logger.error(f"File access error with pdfplumber: {e}")
         metadata["extraction_error"] = str(e)
     except Exception as e:
-        print(f"Parsing error with pdfplumber: {e}")
+        logger.error(f"Parsing error with pdfplumber: {e}")
         metadata["extraction_error"] = str(e)
 
     # Extract images with PyMuPDF
@@ -111,21 +108,22 @@ def _parse_pdf(file_bytes):
                         if not safe_ext:
                             safe_ext = 'png'
                         
-                        image_filename = os.path.join("temp_images", f"pdf_p{page_index+1}_{img_index}.{safe_ext}")
+                        # Secure filename generation
+                        safe_filename = f"pdf_p{page_index+1}_{img_index}.{safe_ext}"
+                        image_filename = os.path.join("temp_images", os.path.basename(safe_filename))
                         
                         # Validate and save image
                         if _validate_and_save_image(image_bytes, image_filename):
                             image_filenames.add(image_filename)
                             
                     except (IOError, OSError) as e:
-                        print(f"Image file error: {e}")
+                        logger.error(f"Image file error: {e}")
                     except Exception as e:
-                        print(f"Image extraction error: {e}")
+                        logger.error(f"Image extraction error: {e}")
     except Exception as e:
-        print(f"Error with image extraction: {e}")
+        logger.error(f"Error with image extraction: {e}")
 
     image_files = sorted(list(image_filenames))
-    
     metadata["images_found"] = len(image_files)
     
     return {
@@ -178,7 +176,6 @@ def _parse_docx(file_bytes):
                         if len(cleaned_row) > 1:
                             current_csv_table.append(cleaned_row)
                 except (ValueError, csv.Error):
-                    # Skip invalid CSV data
                     pass
             else:
                 if current_csv_table:
@@ -193,7 +190,7 @@ def _parse_docx(file_bytes):
         metadata["images_found"] = len(image_files)
             
     except Exception as e:
-        print(f"Error parsing DOCX: {e}")
+        logger.error(f"Error parsing DOCX: {e}")
         metadata["extraction_error"] = str(e)
     
     return {
@@ -239,7 +236,7 @@ def _parse_pptx(file_bytes):
         metadata["images_found"] = len(image_files)
             
     except Exception as e:
-        print(f"Error parsing PPTX: {e}")
+        logger.error(f"Error parsing PPTX: {e}")
         metadata["extraction_error"] = str(e)
     
     return {
@@ -287,7 +284,7 @@ def _parse_txt(file_bytes):
             all_tables.append(current_table)
             
     except Exception as e:
-        print(f"Error parsing TXT: {e}")
+        logger.error(f"Error parsing TXT: {e}")
         metadata["extraction_error"] = str(e)
     
     return {
@@ -332,7 +329,7 @@ def _parse_html(file_bytes):
         metadata["images_found"] = len(image_files)
         
     except Exception as e:
-        print(f"Error parsing HTML: {e}")
+        logger.error(f"Error parsing HTML: {e}")
         metadata["extraction_error"] = str(e)
     
     return {
@@ -367,7 +364,7 @@ def _parse_csv(file_bytes):
         metadata["tables_found"] = len(all_tables)
         
     except Exception as e:
-        print(f"Error parsing CSV: {e}")
+        logger.error(f"Error parsing CSV: {e}")
         metadata["extraction_error"] = str(e)
     
     return {
@@ -413,14 +410,14 @@ def _extract_docx_images(file_bytes):
                     
                     # Create safe filename
                     safe_filename = f"docx_img_{len(image_files)}{ext}"
-                    image_path = os.path.join("temp_images", safe_filename)
+                    image_path = os.path.join("temp_images", os.path.basename(safe_filename))
                     
                     # Validate and save image
                     if _validate_and_save_image(image_data, image_path):
                         image_files.append(image_path)
                         
     except Exception as e:
-        print(f"Error extracting DOCX images: {e}")
+        logger.error(f"Error extracting DOCX images: {e}")
     
     return image_files
 
@@ -443,14 +440,14 @@ def _extract_pptx_images(file_bytes):
                     
                     # Create safe filename
                     safe_filename = f"pptx_img_{len(image_files)}{ext}"
-                    image_path = os.path.join("temp_images", safe_filename)
+                    image_path = os.path.join("temp_images", os.path.basename(safe_filename))
                     
                     # Validate and save image
                     if _validate_and_save_image(image_data, image_path):
                         image_files.append(image_path)
                         
     except Exception as e:
-        print(f"Error extracting PPTX images: {e}")
+        logger.error(f"Error extracting PPTX images: {e}")
     
     return image_files
 
@@ -484,17 +481,17 @@ def _extract_html_images(soup):
                     
                     # Create safe filename
                     safe_filename = f"html_img_{i}{ext}"
-                    image_path = os.path.join("temp_images", safe_filename)
+                    image_path = os.path.join("temp_images", os.path.basename(safe_filename))
                     
                     # Validate and save image
                     if _validate_and_save_image(image_data, image_path):
                         image_files.append(image_path)
                         
                 except Exception as e:
-                    print(f"Error processing base64 image {i}: {e}")
+                    logger.error(f"Error processing base64 image {i}: {e}")
                     
     except Exception as e:
-        print(f"Error extracting HTML images: {e}")
+        logger.error(f"Error extracting HTML images: {e}")
     
     return image_files
 
@@ -520,6 +517,5 @@ def _validate_and_save_image(image_data, image_path):
             return True
             
     except Exception as e:
-        print(f"Error validating/saving image: {e}")
+        logger.error(f"Error validating/saving image: {e}")
         return False
-

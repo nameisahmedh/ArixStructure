@@ -214,7 +214,7 @@ if st.session_state.doc_data:
             with cols[i]:
                 try:
                     st.image(img_path, caption=f"Image {i+1}", use_column_width=True)
-                except:
+                except (OSError, FileNotFoundError, IOError):
                     st.error(f"❌ Could not load image {i+1}")
         
         if len(images) > 3:

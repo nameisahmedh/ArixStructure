@@ -15,11 +15,16 @@ class HuggingFaceClient:
         self.base_url = "https://api-inference.huggingface.co/models/"
         
     def _get_token(self):
-        """Securely get HF token"""
+        """Securely get HF token from secrets or environment"""
         try:
+            # Try Streamlit secrets first
             return st.secrets["HF_TOKEN"]
-        except:
-            return os.getenv("HF_TOKEN")
+        except (KeyError, AttributeError):
+            # Fallback to environment variable
+            token = os.getenv("HF_TOKEN")
+            if not token:
+                logger.warning("HF_TOKEN not found. AI features will be limited.")
+            return token
     
     def _query_api(self, model, payload, retries=3):
         """Query HF API with retry logic"""
@@ -107,7 +112,14 @@ def get_image_descriptions(image_paths):
             continue
             
         try:
-            with open(img_path, "rb") as f:
+            # Validate path to prevent traversal
+            safe_path = os.path.abspath(img_path)
+            temp_dir = os.path.abspath("temp_images")
+            if not safe_path.startswith(temp_dir):
+                descriptions.append({"path": img_path, "description": "Invalid image path"})
+                continue
+                
+            with open(safe_path, "rb") as f:
                 img_data = f.read()
             
             response = requests.post(
@@ -126,7 +138,7 @@ def get_image_descriptions(image_paths):
             else:
                 desc = "Image analysis unavailable"
                 
-        except Exception as e:
+        except (requests.RequestException, IOError, OSError) as e:
             logger.error(f"Image processing error: {e}")
             desc = "Image processing failed"
         
