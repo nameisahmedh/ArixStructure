@@ -1,16 +1,21 @@
 [theme]
-primaryColor = "#3b82f6"
+primaryColor = "#667eea"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f8fafc"
-textColor = "#1f2937"
-font = "sans serif"
+textColor = "#1a202c"
 
 [server]
 headless = true
-port = 8501
+enableCORS = false
+enableXsrfProtection = false
+baseUrlPath = ""
+runOnSave = false
 
 [browser]
 gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
 
-[client]
-showErrorDetails = false
+[global]
+developmentMode = false
+suppressDeprecationWarnings = true

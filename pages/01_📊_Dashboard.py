@@ -40,23 +40,25 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Navigation buttons
-col1, col2, col3, col4, col5 = st.columns(5)
-with col1:
-    if st.button("🏠 Home", use_container_width=True):
-        st.switch_page("app.py")
-with col2:
-    if st.button("🤖 AI Assistant", use_container_width=True):
-        st.switch_page("pages/02_🤖_AI_Assistant.py")
-with col3:
-    if st.button("📈 Analytics", use_container_width=True):
-        st.switch_page("pages/03_📈_Analytics.py")
-with col4:
-    if st.button("🖼️ Images", use_container_width=True):
-        st.switch_page("pages/04_🖼️_Images.py")
-with col5:
-    if st.button("📝 Text Analysis", use_container_width=True):
-        st.switch_page("pages/05_📝_Text_Analysis.py")
+# Navigation buttons in stable container
+nav_container = st.container()
+with nav_container:
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        if st.button("🏠 Home", use_container_width=True, key="dash_home"):
+            st.switch_page("app.py")
+    with col2:
+        if st.button("🤖 AI Assistant", use_container_width=True, key="dash_ai"):
+            st.switch_page("pages/02_🤖_AI_Assistant.py")
+    with col3:
+        if st.button("📈 Analytics", use_container_width=True, key="dash_analytics"):
+            st.switch_page("pages/03_📈_Analytics.py")
+    with col4:
+        if st.button("🖼️ Images", use_container_width=True, key="dash_images"):
+            st.switch_page("pages/04_🖼️_Images.py")
+    with col5:
+        if st.button("📝 Text Analysis", use_container_width=True, key="dash_text"):
+            st.switch_page("pages/05_📝_Text_Analysis.py")
 
 st.divider()
 
@@ -72,12 +74,11 @@ with st.sidebar:
     )
     
     if uploaded_file and st.session_state.get("last_uploaded_name") != uploaded_file.name:
-        with st.spinner("🏗️ Structuring your data..."):
-            doc_data = process_document_with_progress(uploaded_file.getvalue(), uploaded_file.name)
-            if doc_data:
-                st.success(f"✅ Successfully structured '{uploaded_file.name}'")
-                st.balloons()
-                st.rerun()
+        doc_data = process_document_with_progress(uploaded_file.getvalue(), uploaded_file.name)
+        if doc_data:
+            st.success(f"✅ Successfully structured '{uploaded_file.name}'")
+            st.balloons()
+            st.rerun()
     
     st.divider()
     

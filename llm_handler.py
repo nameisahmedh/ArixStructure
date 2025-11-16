@@ -1,219 +1,169 @@
 import streamlit as st
-from huggingface_hub import InferenceClient
+import requests
 import os
-import time
-import re
 import logging
+import time
 
-# --- Initialize the Hugging Face Client ---
-def get_hf_token():
-    """Get HF token from secrets or environment"""
-    try:
-        return st.secrets["HF_TOKEN"]
-    except (KeyError, FileNotFoundError):
-        token = os.getenv("HF_TOKEN")
-        if not token:
-            st.error("❌ HF_TOKEN not found. Please set it in secrets.toml or environment variables.")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class HuggingFaceClient:
+    def __init__(self):
+        self.token = self._get_token()
+        self.headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+        self.base_url = "https://api-inference.huggingface.co/models/"
+        
+    def _get_token(self):
+        """Securely get HF token"""
+        try:
+            return st.secrets["HF_TOKEN"]
+        except:
+            return os.getenv("HF_TOKEN")
+    
+    def _query_api(self, model, payload, retries=3):
+        """Query HF API with retry logic"""
+        if not self.token:
             return None
-        return token
+            
+        url = self.base_url + model
+        
+        for attempt in range(retries):
+            try:
+                response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+                
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 503:
+                    if attempt < retries - 1:
+                        time.sleep(2 ** attempt)  # Exponential backoff
+                        continue
+                    return {"error": "Model loading"}
+                else:
+                    logger.error(f"API error: {response.status_code}")
+                    return None
+                    
+            except requests.RequestException as e:
+                logger.error(f"Request failed: {e}")
+                if attempt == retries - 1:
+                    return None
+                time.sleep(1)
+        
+        return None
 
-try:
-    hf_token = get_hf_token()
-    if hf_token:
-        client = InferenceClient(token=hf_token)
-    else:
-        client = None
-except Exception as e:
-    st.error(f"Failed to initialize Hugging Face client: {e}")
-    client = None
-
-# --- Define the models we'll use (free tier) ---
-TEXT_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
-VISION_MODEL = "Salesforce/blip-image-captioning-large"
-
+# Initialize client
+hf_client = HuggingFaceClient()
 
 def get_text_response(prompt, context):
-    """
-    Sends a text prompt and context to Mistral-7B.
-    Asks for a plain text response.
-    """
-    if client is None:
-        return "HF client not initialized. Please check your token configuration."
+    """Generate AI response using HuggingFace"""
+    if not hf_client.token:
+        return "AI service not configured. Please add HF_TOKEN to secrets.toml"
     
-    try:
-        full_prompt = f"""
-        [INST] You are an expert AI assistant. You will be given the full text of a document
-        and a user's question. Your job is to answer the user's question based
-        ONLY on the document's text.
-
-        - **Provide a detailed, structured answer.**
-        - **Do NOT use Markdown (like **bold** or ## headers).**
-        - **Use clear, plain text, with newlines for formatting.**
-        - If the answer requires bullet points, use simple dashes (-).
+    # Use text generation model
+    payload = {
+        "inputs": f"Context: {context[:800]}\n\nQuestion: {prompt}\n\nAnswer:",
+        "parameters": {
+            "max_new_tokens": 200,
+            "temperature": 0.7,
+            "return_full_text": False
+        }
+    }
+    
+    result = hf_client._query_api("microsoft/DialoGPT-medium", payload)
+    
+    if result:
+        if isinstance(result, list) and len(result) > 0:
+            return result[0].get("generated_text", "").strip()
+        elif "error" in result:
+            if result["error"] == "Model loading":
+                return "AI model is starting up. Please try again in a moment."
+    
+    # Fallback to summarization for document questions
+    if "what" in prompt.lower() and "about" in prompt.lower():
+        payload = {
+            "inputs": context[:1000],
+            "parameters": {"max_length": 100, "min_length": 20}
+        }
         
-        --- DOCUMENT CONTEXT ---
-        {context}
-        --- END OF CONTEXT ---
+        result = hf_client._query_api("facebook/bart-large-cnn", payload)
         
-        Here is the user's question:
-        Question: {prompt} [/INST]
-        """
-        
-        response = client.chat_completion(
-            messages=[{"role": "user", "content": full_prompt}],
-            model=TEXT_MODEL,
-            max_tokens=1024,
-            temperature=0.1
-        )
-        return response.choices[0].message.content
-        
-    except Exception as e:
-        if client is None:
-            return "HF client not initialized. Please check your token configuration."
-        if "is currently loading" in str(e):
-            st.warning("The free model is loading. Please wait 10-20 seconds and ask again.")
-            return "The AI model is warming up. Please try your request again in a moment."
-        logging.error(f"Error analyzing text with Hugging Face: {e}")
-        return f"Error analyzing text: {str(e)[:100]}..."
+        if result and isinstance(result, list) and len(result) > 0:
+            summary = result[0].get("summary_text", "")
+            if summary:
+                return f"This document is about: {summary}"
+    
+    return "Unable to process your question at the moment. Please try again."
 
 def get_image_descriptions(image_paths):
-    """
-    Sends images to the vision model and gets descriptions.
-    """
-    if client is None:
-        return [{"path": path, "description": "HF client not initialized"} for path in image_paths]
-    
+    """Get image descriptions using HuggingFace"""
     descriptions = []
-    for i, img_path in enumerate(image_paths):
+    
+    for img_path in image_paths:
+        if not hf_client.token:
+            descriptions.append({
+                "path": img_path,
+                "description": "AI service not configured"
+            })
+            continue
+            
         try:
-            response = client.image_to_text(image=img_path, model=VISION_MODEL)
+            with open(img_path, "rb") as f:
+                img_data = f.read()
             
-            if response and isinstance(response, list) and "generated_text" in response[0]:
-                desc = response[0]["generated_text"]
+            response = requests.post(
+                hf_client.base_url + "nlpconnect/vit-gpt2-image-captioning",
+                headers=hf_client.headers,
+                data=img_data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, list) and len(result) > 0:
+                    desc = result[0].get("generated_text", "Visual content")
+                else:
+                    desc = "Visual content"
             else:
-                desc = "Could not get a description."
-
-            descriptions.append({
-                "path": img_path,
-                "description": desc
-            })
-            
+                desc = "Image analysis unavailable"
+                
         except Exception as e:
-            if "is currently loading" in str(e):
-                st.warning("The free image model is loading. Please wait a moment...")
-                pass
-            print(f"Error describing image {img_path}: {e}")
-            descriptions.append({
-                "path": img_path,
-                "description": f"Error analyzing this image."
-            })
+            logger.error(f"Image processing error: {e}")
+            desc = "Image processing failed"
+        
+        descriptions.append({"path": img_path, "description": desc})
+    
     return descriptions
 
 def get_image_query_response(prompt, image_descriptions):
-    """
-    Answers questions *about* the images using their descriptions.
-    Asks for a plain text response.
-    """
-    if client is None:
-        return "HF client not initialized. Please check your token configuration."
+    """Answer questions about images"""
+    if not image_descriptions:
+        return "No images found in the document."
     
-    context = "\n".join([f"Image: {img['path']}, Description: {img['description']}" for img in image_descriptions])
-    
-    full_prompt = f"""
-    [INST] You are an AI assistant. You will be given a list of image descriptions
-    from a document and a user's question about those images.
-    
-    - **Answer the question based ONLY on the descriptions.**
-    - **Do NOT use Markdown.** Use plain text.
-    
-    --- IMAGE CONTEXT ---
-    {context}
-    --- END OF CONTEXT ---
-    
-    Question: {prompt} [/INST]
-    """
-    try:
-        response = client.chat_completion(
-            messages=[{"role": "user", "content": full_prompt}],
-            model=TEXT_MODEL,
-            max_tokens=512,
-            temperature=0.1
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        if "is currently loading" in str(e):
-            return "The AI model is warming up. Please try your request again in a moment."
-        return f"Error querying images: {e}"
+    context = "\n".join([f"Image {i+1}: {img['description']}" for i, img in enumerate(image_descriptions)])
+    return get_text_response(prompt, f"Document images: {context}")
 
 def get_specific_table_indices(prompt, tables_as_text, num_tables):
-    """
-    Asks the LLM to identify the *indices* of the table(s) the user wants.
-    Returns a comma-separated string of 0-based indices, or "all".
-    """
-    if client is None:
+    """Select table indices based on prompt"""
+    import re
+    
+    prompt_lower = prompt.lower()
+    
+    if "all" in prompt_lower:
         return "all"
     
-    context = ""
-    for i, table_text in enumerate(tables_as_text):
-        context += f"--- TABLE {i} ---\n{table_text}\n\n"
+    # Extract table numbers
+    numbers = re.findall(r'table\s*(\d+)', prompt_lower)
+    if not numbers:
+        numbers = re.findall(r'\b(\d+)\b', prompt)
     
-    full_prompt = f"""
-    [INST] You are a table-selection AI. You will be given a user's prompt
-    and a list of tables (with their 0-based index numbers).
-    The total number of tables is {num_tables}.
+    if numbers:
+        indices = [str(max(0, int(n) - 1)) for n in numbers if 0 < int(n) <= num_tables]
+        if indices:
+            return ", ".join(indices)
     
-    Your ONLY job is to return a comma-separated list of 0-based index
-    numbers for the table(s) that best answer the user's prompt.
+    if "first" in prompt_lower:
+        return "0"
+    elif "last" in prompt_lower:
+        return str(num_tables - 1)
     
-    - **Handle 1-based requests:** If the user asks for "the 1st table", return "0".
-      If the user asks for "1st and 2nd table", return "0, 1".
-    - **Handle "last" requests:** If the user asks for "the last table" and
-      there are 7 tables (indices 0-6), return "6".
-    - **Handle context requests:** If the user asks for "the table with project features",
-      look at the table context and return its index (e.g., "3").
-    - **Handle "all" requests:** If the user asks for "all tables" or "any tables",
-      or if no specific table matches, return the word "all".
-    - **Return ONLY the indices or "all".** Do not add any other text.
-    
-    --- TABLES ---
-    {context}
-    --- END OF TABLES ---
-    
-    User Prompt: {prompt}
-    [/INST]
-    """
-    
-    try:
-        response = client.chat_completion(
-            messages=[{"role": "user", "content": full_prompt}],
-            model=TEXT_MODEL,
-            max_tokens=50, # Room for a few numbers
-            temperature=0.0
-        )
-        result = response.choices[0].message.content.strip().lower()
-        
-        # --- NEW, MORE ROBUST CLEANING LOGIC ---
-        
-        if "all" in result:
-            return "all"
-        
-        # Remove all characters that are NOT digits or commas
-        cleaned_result = re.sub(r'[^\d,]', '', result)
-
-        if cleaned_result:
-            # Final check: make sure it's not just empty commas
-            indices = [s.strip() for s in cleaned_result.split(',') if s.strip().isdigit()]
-            if indices:
-                return ", ".join(indices)
-            else:
-                return "all" # Failed to find valid numbers
-        else:
-            return "all" # Default to all if confused or empty
-        # --- END OF NEW LOGIC ---
-
-    except Exception as e:
-        if "is currently loading" in str(e):
-            return "loading"
-        print(f"Error selecting table: {e}")
-        return "all" # Default to all on error
-
+    return "all"

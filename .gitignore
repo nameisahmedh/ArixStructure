@@ -1,6 +1,8 @@
-# Environment variables
+# Environment variables and secrets
 .env
-secrets.toml
+.streamlit/secrets.toml
+*.key
+*.pem
 
 # Python
 __pycache__/
@@ -11,20 +13,48 @@ __pycache__/
 env/
 venv/
 .venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
 
 # Temporary files
 temp_images/
 temp_plots/
+*.tmp
+*.temp
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+.spyderproject
+.spyproject
 
 # OS
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
 # Logs
 *.log
+logs/
+
+# Virtual environment (if created in project)
+Lib/
+Include/
+Scripts/
+share/
+etc/
+pyvenv.cfg
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3

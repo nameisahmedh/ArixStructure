@@ -30,23 +30,25 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Navigation buttons
-col1, col2, col3, col4, col5 = st.columns(5)
-with col1:
-    if st.button("📊 Dashboard", use_container_width=True):
-        st.switch_page("pages/01_📊_Dashboard.py")
-with col2:
-    if st.button("🤖 AI Assistant", use_container_width=True):
-        st.switch_page("pages/02_🤖_AI_Assistant.py")
-with col3:
-    if st.button("📈 Analytics", use_container_width=True):
-        st.switch_page("pages/03_📈_Analytics.py")
-with col4:
-    if st.button("🖼️ Images", use_container_width=True):
-        st.switch_page("pages/04_🖼️_Images.py")
-with col5:
-    if st.button("📝 Text Analysis", use_container_width=True):
-        st.switch_page("pages/05_📝_Text_Analysis.py")
+# Navigation buttons in stable container
+nav_container = st.container()
+with nav_container:
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        if st.button("📊 Dashboard", use_container_width=True, key="main_dash"):
+            st.switch_page("pages/01_📊_Dashboard.py")
+    with col2:
+        if st.button("🤖 AI Assistant", use_container_width=True, key="main_ai"):
+            st.switch_page("pages/02_🤖_AI_Assistant.py")
+    with col3:
+        if st.button("📈 Analytics", use_container_width=True, key="main_analytics"):
+            st.switch_page("pages/03_📈_Analytics.py")
+    with col4:
+        if st.button("🖼️ Images", use_container_width=True, key="main_images"):
+            st.switch_page("pages/04_🖼️_Images.py")
+    with col5:
+        if st.button("📝 Text Analysis", use_container_width=True, key="main_text"):
+            st.switch_page("pages/05_📝_Text_Analysis.py")
 
 st.divider()
 
@@ -96,12 +98,13 @@ with col2:
         ("📥", "Export", "Download in preferred formats")
     ]
     
+    step_html_parts = []
     for i, (icon, title, desc) in enumerate(steps, 1):
         bg_color = "#374151" if st.session_state.theme_mode == 'dark' else "#f8fafc"
         text_color = "#ffffff" if st.session_state.theme_mode == 'dark' else "#1a202c"
         desc_color = "#d1d5db" if st.session_state.theme_mode == 'dark' else "#64748b"
         
-        st.markdown(f"""
+        step_html = f"""
         <div style="display: flex; align-items: center; margin: 1rem 0; padding: 1rem; background: {bg_color}; border-radius: 10px; border-left: 4px solid #667eea; color: {text_color};">
             <div style="font-size: 1.5rem; margin-right: 1rem; width: 40px; color: {text_color};">{icon}</div>
             <div>
@@ -109,7 +112,10 @@ with col2:
                 <small style="color: {desc_color};">{desc}</small>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+        step_html_parts.append(step_html)
+    
+    st.markdown(''.join(step_html_parts), unsafe_allow_html=True)
 
 # Current document status
 if st.session_state.get('doc_data'):
