@@ -90,22 +90,36 @@ with st.sidebar:
             if not url.startswith(('http://', 'https://')):
                 url = 'https://' + url
             
-            try:
-                with st.spinner(f"🔄 Fetching and structuring content..."):
-                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-                    response = requests.get(url, headers=headers, timeout=30)
-                    response.raise_for_status()
-                
-                filename = os.path.basename(urllib.parse.urlparse(url).path) or "webpage.html"
-                doc_data = process_document_with_progress(response.content, filename)
-                
-                if doc_data:
-                    st.success("✅ Successfully structured web content")
-                    st.balloons()
-                    st.rerun()
-                    
-            except Exception as e:
-                st.error(f"❌ Error processing URL: {e}")
+            # URL validation
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            if not parsed.netloc or parsed.scheme not in ['http', 'https']:
+                st.error("❌ Invalid URL format")
+            elif parsed.netloc in ['localhost', '127.0.0.1'] or parsed.netloc.startswith('192.168.') or parsed.netloc.startswith('10.'):
+                st.error("❌ Local/private URLs not allowed for security")
+            else:
+                try:
+                    with st.spinner(f"🔄 Fetching and structuring content..."):
+                        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                        response = requests.get(url, headers=headers, timeout=10, allow_redirects=False)
+                        response.raise_for_status()
+                        
+                        # Check content size
+                        if len(response.content) > 10 * 1024 * 1024:  # 10MB limit
+                            st.error("❌ Content too large (max 10MB)")
+                        else:
+                            filename = os.path.basename(urllib.parse.urlparse(url).path) or "webpage.html"
+                            doc_data = process_document_with_progress(response.content, filename)
+                            
+                            if doc_data:
+                                st.success("✅ Successfully structured web content")
+                                st.balloons()
+                                st.rerun()
+                        
+                except requests.RequestException as e:
+                    st.error(f"❌ Network error: {str(e)[:100]}")
+                except Exception as e:
+                    st.error(f"❌ Error processing URL: {str(e)[:100]}")
         else:
             st.warning("⚠️ Please enter a valid URL")
 

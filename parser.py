@@ -10,8 +10,11 @@ from bs4 import BeautifulSoup
 import csv
 
 # Create a directory to store extracted images
-if not os.path.exists("temp_images"):
-    os.makedirs("temp_images")
+try:
+    if not os.path.exists("temp_images"):
+        os.makedirs("temp_images")
+except OSError as e:
+    print(f"Warning: Could not create temp_images directory: {e}")
 
 def clean_text(text):
     """Cleans up extracted text."""
@@ -76,8 +79,11 @@ def _parse_pdf(file_bytes):
                             clean_table.append(clean_row)
                         all_tables.append(clean_table)
 
+    except (FileNotFoundError, PermissionError) as e:
+        print(f"File access error with pdfplumber: {e}")
+        metadata["extraction_error"] = str(e)
     except Exception as e:
-        print(f"Error with pdfplumber: {e}")
+        print(f"Parsing error with pdfplumber: {e}")
         metadata["extraction_error"] = str(e)
 
     # Extract images with PyMuPDF
@@ -97,8 +103,10 @@ def _parse_pdf(file_bytes):
                         with Image.open(io.BytesIO(image_bytes)) as pil_img:
                             pil_img.save(image_filename)
                         image_filenames.add(image_filename)
+                    except (IOError, OSError) as e:
+                        print(f"Image file error: {e}")
                     except Exception as e:
-                        print(f"Error extracting image: {e}")
+                        print(f"Image extraction error: {e}")
     except Exception as e:
         print(f"Error with image extraction: {e}")
 

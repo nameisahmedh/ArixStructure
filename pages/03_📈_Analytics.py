@@ -588,10 +588,15 @@ if st.session_state.doc_data:
                 if result and len(result) == 2:
                     fig, config = result
                     
-                    # Display chart with full interactivity
-                    st.plotly_chart(fig, use_container_width=True)
+                    # Display chart with full interactivity and proper styling
+                    st.plotly_chart(fig, use_container_width=True, config={
+                        'displayModeBar': True,
+                        'displaylogo': False,
+                        'modeBarButtonsToRemove': ['pan2d', 'lasso2d']
+                    })
                     
-                    # Interactive features info
+                    # Success message with interactive features info
+                    st.success("✅ **Visualization Created Successfully!**")
                     st.info("🎯 **Interactive Features**: Zoom, Pan, Select, Download, Reset, Hover for details")
                     
                     # Export and analysis options

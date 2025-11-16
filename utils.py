@@ -12,14 +12,25 @@ try:
     from reportlab.lib.styles import getSampleStyleSheet
     reportlab_available = True
 except ImportError:
+    print("Warning: reportlab not available. PDF export will be disabled.")
     reportlab_available = False
+
 try:
     import openpyxl
 except ImportError:
+    print("Warning: openpyxl not available. Excel export will be disabled.")
     openpyxl = None
 
-if 'theme_mode' not in st.session_state:
-    st.session_state.theme_mode = 'light'
+def init_theme_mode():
+    """Initialize theme mode safely"""
+    if 'theme_mode' not in st.session_state:
+        st.session_state.theme_mode = 'light'
+
+# Only initialize if streamlit is available
+try:
+    init_theme_mode()
+except:
+    pass
 
 def get_theme_css():
     """Consistent CSS with Poppins font for all pages"""
@@ -785,6 +796,8 @@ def init_session_state():
     for key, default_value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = default_value
+    
+    init_theme_mode()
 
 def clear_temp_folder():
     """Clear temporary folders"""
@@ -856,14 +869,31 @@ def save_plot_as_image(fig, filename, format="png"):
         else:
             width, height, scale = 1200, 800, 2
         
-        # Generate high-quality image
-        img_bytes = fig.to_image(
-            format=format, 
-            width=width, 
-            height=height, 
-            scale=scale,
-            engine="kaleido"
-        )
+        # Try kaleido first, fallback to HTML if not available
+        try:
+            img_bytes = fig.to_image(
+                format=format, 
+                width=width, 
+                height=height, 
+                scale=scale,
+                engine="kaleido"
+            )
+        except Exception:
+            # Fallback: save as HTML if kaleido not available
+            if format.lower() == 'html' or format.lower() not in ['png', 'jpg', 'jpeg', 'svg']:
+                filepath = f"temp_plots/{filename}.html"
+                fig.write_html(filepath)
+                with open(filepath, "rb") as f:
+                    img_bytes = f.read()
+                return img_bytes, filepath
+            else:
+                st.warning("⚠️ Kaleido not available. Install with: pip install kaleido")
+                # Save as HTML instead
+                filepath = f"temp_plots/{filename}.html"
+                fig.write_html(filepath)
+                with open(filepath, "rb") as f:
+                    img_bytes = f.read()
+                return img_bytes, filepath
         
         filepath = f"temp_plots/{filename}.{format}"
         with open(filepath, "wb") as f:
@@ -871,7 +901,7 @@ def save_plot_as_image(fig, filename, format="png"):
         
         return img_bytes, filepath
     except Exception as e:
-        st.error(f"❌ Error saving plot: {e}")
+        st.error(f"❌ Error saving plot: {str(e)[:100]}")
         return None, None
 
 def create_comprehensive_export(table, table_name="table"):
