@@ -32,22 +32,24 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-col1, col2, col3, col4, col5 = st.columns(5)
-with col1:
-    if st.button("🏠 Home", use_container_width=True):
-        st.switch_page("app.py")
-with col2:
-    if st.button("📊 Dashboard", use_container_width=True):
-        st.switch_page("pages/01_📊_Dashboard.py")
-with col3:
-    if st.button("📈 Analytics", use_container_width=True):
-        st.switch_page("pages/03_📈_Analytics.py")
-with col4:
-    if st.button("🖼️ Images", use_container_width=True):
-        st.switch_page("pages/04_🖼️_Images.py")
-with col5:
-    if st.button("📝 Text Analysis", use_container_width=True):
-        st.switch_page("pages/05_📝_Text_Analysis.py")
+nav_container = st.container()
+with nav_container:
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        if st.button("🏠 Home", use_container_width=True, key="ai_home"):
+            st.switch_page("app.py")
+    with col2:
+        if st.button("📊 Dashboard", use_container_width=True, key="ai_dash"):
+            st.switch_page("pages/01_📊_Dashboard.py")
+    with col3:
+        if st.button("📈 Analytics", use_container_width=True, key="ai_analytics"):
+            st.switch_page("pages/03_📈_Analytics.py")
+    with col4:
+        if st.button("🖼️ Images", use_container_width=True, key="ai_images"):
+            st.switch_page("pages/04_🖼️_Images.py")
+    with col5:
+        if st.button("📝 Text Analysis", use_container_width=True, key="ai_text"):
+            st.switch_page("pages/05_📝_Text_Analysis.py")
 
 st.divider()
 
@@ -67,17 +69,22 @@ def process_intelligent_query(query, doc_data):
         context = f"Document Summary: {full_text[:500]}...\n\n"
         context += f"Total Tables: {len(tables)}\n\n"
         
+        context_parts = [f"Document Summary: {full_text[:500]}...\n\n", f"Total Tables: {len(tables)}\n\n"]
+        
         for i, table in enumerate(tables):
             if table:
                 headers = table[0] if table else []
                 sample_data = table[1:3] if len(table) > 1 else []
-                context += f"Table {i+1} ({len(table)} rows, {len(headers)} columns):\n"
-                context += f"Headers: {', '.join(str(h) for h in headers)}\n"
+                table_info = [f"Table {i+1} ({len(table)} rows, {len(headers)} columns):\n"]
+                table_info.append(f"Headers: {', '.join(str(h) for h in headers)}\n")
                 if sample_data:
-                    context += "Sample data:\n"
+                    table_info.append("Sample data:\n")
                     for row in sample_data:
-                        context += f"  {', '.join(str(cell) for cell in row)}\n"
-                context += "\n"
+                        table_info.append(f"  {', '.join(str(cell) for cell in row)}\n")
+                table_info.append("\n")
+                context_parts.extend(table_info)
+        
+        context = ''.join(context_parts)
         return context
     
     # Table-related queries
@@ -158,8 +165,17 @@ def process_intelligent_query(query, doc_data):
         
         # Enhanced LLM context for better accuracy
         if not results['content'] and results['tables']:
-            enhanced_context = build_enhanced_context(results['tables'], doc_data.get('full_text', ''))
-            results['content'] = llm_handler.get_text_response(f"Query: {query}\n\nContext: {enhanced_context}", "")
+            # Build detailed table context for calculations
+            table_context_parts = []
+            for i, table in enumerate(results['tables']):
+                table_context_parts.append(f"Table {i+1}:\n")
+                for row_idx, row in enumerate(table):
+                    table_context_parts.append(f"Row {row_idx+1}: {', '.join(str(cell) for cell in row)}\n")
+                table_context_parts.append("\n")
+            table_context = ''.join(table_context_parts)
+            
+            prompt = f"Based on this table data, answer the user's question: '{query}'\n\nTable Data:\n{table_context}\n\nProvide accurate calculations and specific answers based on the actual data shown."
+            results['content'] = llm_handler.get_text_response(prompt, "")
         elif not results['tables']:
             results['content'] = "No tables found in the document."
     
@@ -257,8 +273,11 @@ if st.session_state.doc_data:
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
             st.markdown("### 🤖 AI Response")
             
-            st.markdown(f"**❓ Your Question:** {user_question}")
-            st.markdown(f"**💡 AI Answer:** {results['content']}")
+            import html
+            safe_question = html.escape(user_question)
+            safe_answer = html.escape(results['content'])
+            st.markdown(f"**❓ Your Question:** {safe_question}")
+            st.markdown(f"**💡 AI Answer:** {safe_answer}")
             
             # AI Response Export Options
             st.markdown("#### 📥 Export AI Response")
@@ -275,9 +294,9 @@ if st.session_state.doc_data:
                 )
             
             with col2:
-                # Copy AI response
-                if st.button("📋 Copy Response"):
-                    st.code(response_text, language="text")
+                # Show response in copyable format
+                if st.button("📋 Show Copyable Text", key="copy_response"):
+                    st.text_area("Copy this text:", response_text, height=200, key="copyable_response")
             
             with col3:
                 # Download as JSON
@@ -323,8 +342,8 @@ if st.session_state.doc_data:
                             key=f"json_{i}"
                         )
                     with col3:
-                        if st.button(f"📋 Copy Table {i+1}", key=f"copy_{i}"):
-                            st.code(df.to_string(index=False))
+                        if st.button(f"📋 Show Table {i+1}", key=f"copy_{i}"):
+                            st.text_area(f"Copy Table {i+1}:", df.to_string(index=False), height=150, key=f"copyable_table_{i}")
             
             elif results['type'] == 'image' and results['images']:
                 st.markdown("**🖼️ Retrieved Images:**")

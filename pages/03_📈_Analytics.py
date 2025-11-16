@@ -41,23 +41,25 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Navigation buttons
-col1, col2, col3, col4, col5 = st.columns(5)
-with col1:
-    if st.button("🏠 Home", use_container_width=True):
-        st.switch_page("app.py")
-with col2:
-    if st.button("📊 Dashboard", use_container_width=True):
-        st.switch_page("pages/01_📊_Dashboard.py")
-with col3:
-    if st.button("🤖 AI Assistant", use_container_width=True):
-        st.switch_page("pages/02_🤖_AI_Assistant.py")
-with col4:
-    if st.button("🖼️ Images", use_container_width=True):
-        st.switch_page("pages/04_🖼️_Images.py")
-with col5:
-    if st.button("📝 Text Analysis", use_container_width=True):
-        st.switch_page("pages/05_📝_Text_Analysis.py")
+# Navigation buttons in stable container
+nav_container = st.container()
+with nav_container:
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        if st.button("🏠 Home", use_container_width=True, key="nav_home"):
+            st.switch_page("app.py")
+    with col2:
+        if st.button("📊 Dashboard", use_container_width=True, key="nav_dash"):
+            st.switch_page("pages/01_📊_Dashboard.py")
+    with col3:
+        if st.button("🤖 AI Assistant", use_container_width=True, key="nav_ai"):
+            st.switch_page("pages/02_🤖_AI_Assistant.py")
+    with col4:
+        if st.button("🖼️ Images", use_container_width=True, key="nav_images"):
+            st.switch_page("pages/04_🖼️_Images.py")
+    with col5:
+        if st.button("📝 Text Analysis", use_container_width=True, key="nav_text"):
+            st.switch_page("pages/05_📝_Text_Analysis.py")
 
 st.divider()
 
@@ -493,11 +495,16 @@ if st.session_state.doc_data:
                                         )
                                     with col_c:
                                         if st.button("📈 Visualize Extracted Data"):
-                                            st.session_state['extracted_df'] = extracted_df
-                                            st.info("✅ Use the extracted columns in the visualization builder below")
+                                            st.session_state['extracted_df'] = extracted_df.copy()
+                                            st.session_state['use_extracted'] = True
+                                            st.session_state['extracted_columns'] = suggested_cols
+                                            st.success("✅ Extracted data ready for visualization! Scroll down to create charts.")
+                                            st.rerun()
                                 else:
-                                    st.warning(f"❌ No matching columns found. Available: {', '.join(available_cols)}")
-                                    st.write(f"Parsed: {potential_cols}")
+                                    st.warning(f"❌ No matching columns found for '{extraction_query}'")
+                                    st.info(f"**Available columns**: {', '.join(available_cols)}")
+                                    st.write(f"**AI parsed**: {potential_cols}")
+                                    st.write("💡 **Tip**: Try being more specific or use exact column names")
                             else:
                                 st.error("❌ AI analysis failed")
                         except Exception as e:
@@ -512,9 +519,47 @@ if st.session_state.doc_data:
         st.markdown("### 🎨 Create Visualization")
         
         # Use extracted data if available
-        viz_df = st.session_state.get('extracted_df', df)
-        if 'extracted_df' in st.session_state:
-            st.info("🎯 Using AI-extracted columns for visualization")
+        if st.session_state.get('use_extracted', False) and 'extracted_df' in st.session_state:
+            viz_df = st.session_state['extracted_df'].copy()
+            extracted_cols = st.session_state.get('extracted_columns', [])
+            
+            # Ensure viz_df has proper data types
+            for col in viz_df.columns:
+                if viz_df[col].dtype == 'object':
+                    numeric_series = pd.to_numeric(viz_df[col], errors='coerce')
+                    if not numeric_series.isna().all():
+                        viz_df[col] = numeric_series
+            
+            st.success(f"🎯 Using AI-extracted columns: {', '.join(extracted_cols)}")
+            
+            # Show extracted data info
+            col_info1, col_info2, col_info3 = st.columns(3)
+            with col_info1:
+                st.metric("Extracted Columns", len(viz_df.columns))
+            with col_info2:
+                st.metric("Data Rows", len(viz_df))
+            with col_info3:
+                if st.button("🔄 Use Full Table", key="switch_to_full"):
+                    st.session_state['use_extracted'] = False
+                    st.rerun()
+                    
+            # Show preview of extracted data
+            with st.expander("📋 Extracted Data Preview", expanded=True):
+                st.dataframe(viz_df.head(10), use_container_width=True)
+                
+                # Show data types
+                st.markdown("**Column Types:**")
+                type_info = []
+                for col in viz_df.columns:
+                    col_type = "Numeric" if pd.api.types.is_numeric_dtype(viz_df[col]) else "Text"
+                    type_info.append(f"• {col}: {col_type}")
+                st.write("\n".join(type_info))
+        else:
+            viz_df = df
+            if st.session_state.get('extracted_df') is not None:
+                if st.button("🎯 Use Extracted Columns", key="switch_to_extracted"):
+                    st.session_state['use_extracted'] = True
+                    st.rerun()
         
         col1, col2 = st.columns([2, 1])
         
@@ -576,44 +621,89 @@ if st.session_state.doc_data:
             
             st.info(guidelines.get(chart_type, "Select a chart type for guidelines"))
         
-        # Generate chart
-        if st.button("🎨 Generate Visualization", use_container_width=True, type="primary"):
-            with st.spinner("🎨 Creating visualization..."):
-                result = create_simple_visualization(
-                    viz_df, chart_type, x_column, y_column, 
-                    color_column if color_column and color_column not in ["None", None] else None, 
-                    chart_title
-                )
-                
-                if result and len(result) == 2:
-                    fig, config = result
+        # Generate chart with better UI
+        st.markdown("---")
+        col_gen1, col_gen2 = st.columns([3, 1])
+        with col_gen1:
+            generate_btn = st.button("🎨 Generate Visualization", use_container_width=True, type="primary")
+        with col_gen2:
+            if st.button("🔄 Reset to Full Data", use_container_width=True):
+                if 'extracted_df' in st.session_state:
+                    del st.session_state['extracted_df']
+                if 'use_extracted' in st.session_state:
+                    del st.session_state['use_extracted']
+                st.success("✅ Reset to full table data")
+                st.rerun()
+        
+        if generate_btn:
+            # Validate data before visualization
+            if viz_df.empty:
+                st.error("❌ No data available for visualization")
+            elif x_column not in viz_df.columns:
+                st.error(f"❌ Column '{x_column}' not found in data")
+            else:
+                with st.spinner("🎨 Creating your visualization..."):
+                    # Show what data is being used
+                    data_source = "AI-extracted data" if st.session_state.get('use_extracted', False) else "full table data"
+                    st.info(f"📈 Creating {chart_type.lower()} using {data_source} ({len(viz_df)} rows, {len(viz_df.columns)} columns)")
                     
-                    # Display chart with full interactivity and proper styling
-                    st.plotly_chart(fig, use_container_width=True, config={
-                        'displayModeBar': True,
-                        'displaylogo': False,
-                        'modeBarButtonsToRemove': ['pan2d', 'lasso2d']
-                    })
+                    result = create_simple_visualization(
+                        viz_df, chart_type, x_column, y_column, 
+                        color_column if color_column and color_column not in ["None", None] else None, 
+                        chart_title
+                    )
                     
-                    # Success message with interactive features info
-                    st.success("✅ **Visualization Created Successfully!**")
-                    st.info("🎯 **Interactive Features**: Zoom, Pan, Select, Download, Reset, Hover for details")
+                    if result and len(result) == 2:
+                        fig, config = result
                     
-                    # Export and analysis options
-                    st.markdown("#### 📥 Export & Analysis Options")
+                    # Create stable container for chart
+                    chart_container = st.container()
                     
-                    col1, col2, col3, col4, col5 = st.columns(5)
+                    with chart_container:
+                        # Success message
+                        st.success("✅ **Visualization Created Successfully!**")
+                        
+                        # Display chart with stable container
+                        st.plotly_chart(fig, use_container_width=True, config={
+                            'displayModeBar': True,
+                            'displaylogo': False,
+                            'modeBarButtonsToRemove': ['pan2d', 'lasso2d'],
+                            'toImageButtonOptions': {
+                                'format': 'png',
+                                'filename': chart_title.replace(' ', '_'),
+                                'height': 600,
+                                'width': 1000,
+                                'scale': 2
+                            }
+                        })
+                        
+                        # Interactive features info
+                        st.info("🎯 **Interactive Features**: Zoom, Pan, Select, Download, Reset, Hover for details")
+                    
+                    # Export and analysis options in stable container
+                    export_container = st.container()
+                    
+                    with export_container:
+                        st.markdown("#### 📥 Export & Analysis Options")
+                        
+                        col1, col2, col3, col4, col5 = st.columns(5)
                     
                     with col1:
-                        # Image export
-                        img_bytes, filepath = save_plot_as_image(fig, f"chart_{selected_idx+1}", export_format.lower())
-                        if img_bytes:
-                            st.download_button(
-                                f"📥 {export_format}",
-                                data=img_bytes,
-                                file_name=f"{chart_title.replace(' ', '_')}.{export_format.lower()}",
-                                mime=f"image/{export_format.lower()}"
-                            )
+                        # Image export with better error handling
+                        try:
+                            img_bytes, filepath = save_plot_as_image(fig, f"chart_{selected_idx+1}", export_format.lower())
+                            if img_bytes:
+                                st.download_button(
+                                    f"📥 {export_format}",
+                                    data=img_bytes,
+                                    file_name=f"{chart_title.replace(' ', '_')}.{export_format.lower()}",
+                                    mime=f"image/{export_format.lower()}" if export_format.lower() != 'html' else "text/html",
+                                    help=f"Download chart as {export_format} file"
+                                )
+                            else:
+                                st.warning(f"⚠️ {export_format} export not available")
+                        except Exception as e:
+                            st.error(f"❌ Export error: {str(e)[:50]}...")
                     
                     with col2:
                         # HTML export

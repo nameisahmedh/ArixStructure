@@ -5,20 +5,26 @@ import shutil
 import time
 import io
 import json
+import logging
 from datetime import datetime
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet
     reportlab_available = True
 except ImportError:
-    print("Warning: reportlab not available. PDF export will be disabled.")
+    logger.warning("reportlab not available. PDF export will be disabled.")
     reportlab_available = False
 
 try:
     import openpyxl
 except ImportError:
-    print("Warning: openpyxl not available. Excel export will be disabled.")
+    logger.warning("openpyxl not available. Excel export will be disabled.")
     openpyxl = None
 
 def init_theme_mode():
@@ -29,7 +35,8 @@ def init_theme_mode():
 # Only initialize if streamlit is available
 try:
     init_theme_mode()
-except:
+except Exception:
+    # Silently handle theme initialization errors
     pass
 
 def get_theme_css():
@@ -37,6 +44,11 @@ def get_theme_css():
     base_css = """
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+        
+        /* Prevent font loading issues */
+        * {
+            font-display: swap !important;
+        }
         
         .stApp {
             font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -71,28 +83,47 @@ def get_theme_css():
             margin: 1rem 0;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             border: 1px solid #e2e8f0;
+            min-height: auto;
+            position: relative;
+        }
+        
+        .stContainer {
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+        
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
         }
         
         .stButton > button {
-            font-family: 'Poppins', sans-serif;
-            font-weight: 500;
-            border-radius: 10px;
-            border: none;
-            padding: 0.6rem 1.2rem;
-            transition: all 0.3s ease;
-            background: #667eea;
-            color: white;
+            font-family: 'Poppins', sans-serif !important;
+            font-weight: 500 !important;
+            border-radius: 10px !important;
+            border: none !important;
+            padding: 0.6rem 1.2rem !important;
+            transition: all 0.3s ease !important;
+            background: #667eea !important;
+            color: white !important;
+            min-height: 44px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
         }
         
         .stButton > button:hover {
-            background: #5a6fd8;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+            background: #5a6fd8 !important;
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
         }
         
         .stButton > button[kind="primary"] {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            font-weight: 600 !important;
+        }
+        
+        .stButton {
+            margin: 0.25rem 0 !important;
         }
         
         .stMetric {
@@ -109,34 +140,103 @@ def get_theme_css():
         }
         
         .stSelectbox > div > div {
-            font-family: 'Poppins', sans-serif;
-            border-radius: 8px;
-            border: 1px solid #d1d5db;
+            font-family: 'Poppins', sans-serif !important;
+            border-radius: 8px !important;
+            border: 1px solid #d1d5db !important;
+            min-height: 44px !important;
         }
         
         .stTextInput > div > div > input {
-            font-family: 'Poppins', sans-serif;
-            border-radius: 8px;
-            border: 1px solid #d1d5db;
-            padding: 0.75rem;
+            font-family: 'Poppins', sans-serif !important;
+            border-radius: 8px !important;
+            border: 1px solid #d1d5db !important;
+            padding: 0.75rem !important;
+            min-height: 44px !important;
+            box-sizing: border-box !important;
         }
         
         .stTextArea > div > div > textarea {
-            font-family: 'Poppins', sans-serif;
-            border-radius: 8px;
-            border: 1px solid #d1d5db;
+            font-family: 'Poppins', sans-serif !important;
+            border-radius: 8px !important;
+            border: 1px solid #d1d5db !important;
+            min-height: 100px !important;
+            resize: vertical !important;
+        }
+        
+        .stSlider {
+            padding: 1rem 0 !important;
         }
         
         .stDataFrame {
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border-radius: 10px !important;
+            overflow: hidden !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
+            margin: 1rem 0 !important;
         }
         
         .stExpander {
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 10px !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
+            margin: 0.5rem 0 !important;
+        }
+        
+        .js-plotly-plot {
+            margin: 1rem 0 !important;
+        }
+        
+        .plotly {
+            width: 100% !important;
+            height: auto !important;
+        }
+        
+        [data-testid="stPlotlyChart"] {
+            background: transparent !important;
+            border-radius: 10px !important;
+            padding: 0.5rem !important;
+            margin: 1rem 0 !important;
+        }
+        
+        /* Layout Stability */
+        .stColumns {
+            gap: 1rem !important;
+        }
+        
+        .stColumn {
+            min-width: 0 !important;
+            flex: 1 !important;
+            padding: 0.25rem !important;
+        }
+        
+        /* Prevent layout shifts */
+        .element-container {
+            margin-bottom: 0.5rem !important;
+        }
+        
+        .element-container:empty {
+            display: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        .stAlert {
+            margin: 0.5rem 0 !important;
+            border-radius: 8px !important;
+        }
+        
+        .stSuccess, .stInfo, .stWarning, .stError {
+            margin: 0.5rem 0 !important;
+            border-radius: 8px !important;
+            padding: 1rem !important;
+        }
+        
+        /* Hide empty progress containers */
+        [data-testid="stProgress"]:empty {
+            display: none !important;
+        }
+        
+        .stEmpty:empty {
+            display: none !important;
         }
         
         /* Comprehensive Responsive Design */
@@ -445,6 +545,15 @@ def get_theme_css():
                 color: #ffffff !important;
             }
             
+            /* Fix metric text and values in dark mode */
+            [data-testid="metric-container"] div {
+                color: #ffffff !important;
+            }
+            
+            [data-testid="metric-container"] > div > div > div {
+                color: #ffffff !important;
+            }
+            
             /* Fix dataframe text in dark mode */
             .stDataFrame table {
                 background-color: #1f2937 !important;
@@ -480,10 +589,11 @@ def get_theme_css():
                 color: #ffffff !important;
             }
             
-            /* Fix file uploader in dark mode */
+            /* Enhanced file uploader in dark mode */
             .stFileUploader {
                 background-color: #374151 !important;
                 border-color: #4b5563 !important;
+                border-radius: 12px !important;
             }
             
             .stFileUploader > div {
@@ -493,16 +603,42 @@ def get_theme_css():
             
             .stFileUploader label {
                 color: #ffffff !important;
+                font-weight: 500 !important;
             }
             
             .stFileUploader [data-testid="stFileUploaderDropzone"] {
-                background-color: #374151 !important;
-                border-color: #4b5563 !important;
+                background: linear-gradient(135deg, #374151 0%, #4b5563 100%) !important;
+                border: 2px dashed #6b7280 !important;
+                border-radius: 12px !important;
                 color: #ffffff !important;
+                padding: 2rem !important;
+                text-align: center !important;
+                transition: all 0.3s ease !important;
+                min-height: 120px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+                align-items: center !important;
+            }
+            
+            .stFileUploader [data-testid="stFileUploaderDropzone"]:hover {
+                border-color: #667eea !important;
+                background: linear-gradient(135deg, #4b5563 0%, #374151 100%) !important;
+                transform: translateY(-2px) !important;
+                box-shadow: 0 8px 25px rgba(102, 126, 234, 0.2) !important;
             }
             
             .stFileUploader [data-testid="stFileUploaderDropzoneInstructions"] {
-                color: #ffffff !important;
+                color: #d1d5db !important;
+                font-size: 1.1rem !important;
+                font-weight: 500 !important;
+            }
+            
+            .stFileUploader [data-testid="stFileUploaderDropzoneInstructions"]::before {
+                content: "📁 " !important;
+                font-size: 2rem !important;
+                display: block !important;
+                margin-bottom: 0.5rem !important;
             }
             
             /* Fix form elements labels */
@@ -516,15 +652,28 @@ def get_theme_css():
                 color: #d1d5db !important;
             }
             
-            /* Fix browse files button */
+            /* Enhanced browse files button */
             .stFileUploader button {
-                background-color: #667eea !important;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
                 color: #ffffff !important;
                 border: none !important;
+                border-radius: 8px !important;
+                padding: 0.75rem 1.5rem !important;
+                font-weight: 600 !important;
+                font-family: 'Poppins', sans-serif !important;
+                transition: all 0.3s ease !important;
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
             }
             
             .stFileUploader button:hover {
-                background-color: #5a6fd8 !important;
+                background: linear-gradient(135deg, #5a6fd8 0%, #6a4c93 100%) !important;
+                transform: translateY(-2px) !important;
+                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
+            }
+            
+            .stFileUploader button::before {
+                content: "📂 " !important;
+                margin-right: 0.5rem !important;
             }
             
             /* Fix file uploader text */
@@ -543,6 +692,24 @@ def get_theme_css():
             
             .stTextInput input {
                 color: #ffffff !important;
+            }
+            
+            /* File type indicators and drag states for dark mode */
+            .stFileUploader::after {
+                content: "📄 PDF • 📃 DOCX • 📊 PPTX • 📝 TXT • 🌐 HTML • 📈 CSV" !important;
+                display: block !important;
+                text-align: center !important;
+                font-size: 0.85rem !important;
+                margin-top: 0.5rem !important;
+                opacity: 0.7 !important;
+                font-weight: 400 !important;
+                color: #d1d5db !important;
+            }
+            
+            .stFileUploader [data-testid="stFileUploaderDropzone"][data-drag-active="true"] {
+                border-color: #10b981 !important;
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(102, 126, 234, 0.2) 100%) !important;
+                transform: scale(1.02) !important;
             }
             
             /* Responsive adjustments for dark mode */
@@ -703,10 +870,11 @@ def get_theme_css():
                 color: #1a202c !important;
             }
             
-            /* Fix file uploader in light mode */
+            /* Enhanced file uploader in light mode */
             .stFileUploader {
                 background-color: #ffffff !important;
                 border-color: #d1d5db !important;
+                border-radius: 12px !important;
             }
             
             .stFileUploader > div {
@@ -716,31 +884,70 @@ def get_theme_css():
             
             .stFileUploader label {
                 color: #1a202c !important;
+                font-weight: 500 !important;
             }
             
             .stFileUploader [data-testid="stFileUploaderDropzone"] {
-                background-color: #ffffff !important;
-                border-color: #d1d5db !important;
+                background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%) !important;
+                border: 2px dashed #d1d5db !important;
+                border-radius: 12px !important;
                 color: #1a202c !important;
+                padding: 2rem !important;
+                text-align: center !important;
+                transition: all 0.3s ease !important;
+                min-height: 120px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+                align-items: center !important;
+            }
+            
+            .stFileUploader [data-testid="stFileUploaderDropzone"]:hover {
+                border-color: #667eea !important;
+                background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+                transform: translateY(-2px) !important;
+                box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15) !important;
             }
             
             .stFileUploader [data-testid="stFileUploaderDropzoneInstructions"] {
-                color: #1a202c !important;
+                color: #64748b !important;
+                font-size: 1.1rem !important;
+                font-weight: 500 !important;
+            }
+            
+            .stFileUploader [data-testid="stFileUploaderDropzoneInstructions"]::before {
+                content: "📁 " !important;
+                font-size: 2rem !important;
+                display: block !important;
+                margin-bottom: 0.5rem !important;
             }
             
             .stHelp {
                 color: #64748b !important;
             }
             
-            /* Fix browse files button in light mode */
+            /* Enhanced browse files button in light mode */
             .stFileUploader button {
-                background-color: #667eea !important;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
                 color: #ffffff !important;
                 border: none !important;
+                border-radius: 8px !important;
+                padding: 0.75rem 1.5rem !important;
+                font-weight: 600 !important;
+                font-family: 'Poppins', sans-serif !important;
+                transition: all 0.3s ease !important;
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3) !important;
             }
             
             .stFileUploader button:hover {
-                background-color: #5a6fd8 !important;
+                background: linear-gradient(135deg, #5a6fd8 0%, #6a4c93 100%) !important;
+                transform: translateY(-2px) !important;
+                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
+            }
+            
+            .stFileUploader button::before {
+                content: "📂 " !important;
+                margin-right: 0.5rem !important;
             }
             
             .stFileUploader > div > div {
@@ -758,6 +965,17 @@ def get_theme_css():
             
             .stTextInput input {
                 color: #1a202c !important;
+            }
+            
+            /* File type indicators for light mode */
+            .stFileUploader::after {
+                color: #64748b !important;
+            }
+            
+            .stFileUploader [data-testid="stFileUploaderDropzone"][data-drag-active="true"] {
+                border-color: #10b981 !important;
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(102, 126, 234, 0.1) 100%) !important;
+                transform: scale(1.02) !important;
             }
             
             /* Responsive adjustments for light mode */
@@ -843,28 +1061,64 @@ def process_document_with_progress(file_bytes, filename):
         st.session_state.doc_data = doc_data
         st.session_state.last_uploaded_name = filename
         
-        time.sleep(0.5)
+        time.sleep(0.3)
         progress_bar.empty()
         status_text.empty()
         
         return doc_data
         
     except Exception as e:
-        st.error(f"❌ Error structuring document: {e}")
         progress_bar.empty()
         status_text.empty()
+        st.error(f"❌ Error structuring document: {e}")
+        return None
+
+def safe_file_operation(file_path, operation):
+    """Safely perform file operations with proper validation"""
+    try:
+        # Validate file path to prevent path traversal
+        if not file_path or '..' in file_path or file_path.startswith('/'):
+            raise ValueError("Invalid file path")
+        
+        # Normalize and validate path
+        normalized_path = os.path.normpath(file_path)
+        current_dir = os.getcwd()
+        
+        # Ensure path is within current directory
+        if not os.path.commonpath([normalized_path, current_dir]) == current_dir:
+            raise ValueError("Path outside working directory")
+        
+        # Ensure file exists and is readable
+        if not os.path.exists(normalized_path):
+            raise FileNotFoundError(f"File not found: {normalized_path}")
+        
+        return operation(normalized_path)
+    except Exception as e:
+        logger.error(f"File operation failed: {str(e)}")
+        st.error(f"File operation failed: {str(e)}")
         return None
 
 def save_plot_as_image(fig, filename, format="png"):
     """Save plotly figure as image with optimized settings"""
     try:
-        if not os.path.exists("temp_plots"):
-            os.makedirs("temp_plots")
+        # Sanitize filename to prevent path traversal
+        import re
+        safe_filename = re.sub(r'[^a-zA-Z0-9_-]', '_', str(filename))
+        safe_format = re.sub(r'[^a-zA-Z0-9]', '', str(format).lower())
+        
+        temp_dir = "temp_plots"
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+        
+        # Validate temp directory is safe
+        temp_dir = os.path.normpath(temp_dir)
+        if not temp_dir.startswith(os.getcwd()):
+            raise ValueError("Invalid temp directory")
         
         # Optimize image settings based on format
-        if format.lower() in ['png', 'jpg', 'jpeg']:
+        if safe_format in ['png', 'jpg', 'jpeg']:
             width, height, scale = 1400, 900, 2
-        elif format.lower() == 'svg':
+        elif safe_format == 'svg':
             width, height, scale = 1200, 800, 1
         else:
             width, height, scale = 1200, 800, 2
@@ -872,16 +1126,17 @@ def save_plot_as_image(fig, filename, format="png"):
         # Try kaleido first, fallback to HTML if not available
         try:
             img_bytes = fig.to_image(
-                format=format, 
+                format=safe_format, 
                 width=width, 
                 height=height, 
                 scale=scale,
                 engine="kaleido"
             )
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Kaleido not available: {e}")
             # Fallback: save as HTML if kaleido not available
-            if format.lower() == 'html' or format.lower() not in ['png', 'jpg', 'jpeg', 'svg']:
-                filepath = f"temp_plots/{filename}.html"
+            if safe_format == 'html' or safe_format not in ['png', 'jpg', 'jpeg', 'svg']:
+                filepath = os.path.join(temp_dir, f"{safe_filename}.html")
                 fig.write_html(filepath)
                 with open(filepath, "rb") as f:
                     img_bytes = f.read()
@@ -889,18 +1144,19 @@ def save_plot_as_image(fig, filename, format="png"):
             else:
                 st.warning("⚠️ Kaleido not available. Install with: pip install kaleido")
                 # Save as HTML instead
-                filepath = f"temp_plots/{filename}.html"
+                filepath = os.path.join(temp_dir, f"{safe_filename}.html")
                 fig.write_html(filepath)
                 with open(filepath, "rb") as f:
                     img_bytes = f.read()
                 return img_bytes, filepath
         
-        filepath = f"temp_plots/{filename}.{format}"
+        filepath = os.path.join(temp_dir, f"{safe_filename}.{safe_format}")
         with open(filepath, "wb") as f:
             f.write(img_bytes)
         
         return img_bytes, filepath
     except Exception as e:
+        logger.error(f"Error saving plot: {e}")
         st.error(f"❌ Error saving plot: {str(e)[:100]}")
         return None, None
 
@@ -920,7 +1176,7 @@ def create_comprehensive_export(table, table_name="table"):
             "table_name": table_name,
             "rows": len(df),
             "columns": list(df.columns),
-            "structured_at": datetime.now().isoformat(),
+            "structured_at": datetime.now().replace(microsecond=0).isoformat(),
             "source": "ArixStructure"
         },
         "data": df.to_dict('records')

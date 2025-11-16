@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Smart Document Analyzer - Launcher Script
 This script helps launch the application with proper error handling and setup validation.
@@ -68,14 +67,14 @@ def check_secrets():
     try:
         with open(secrets_path, 'r') as f:
             content = f.read()
-            if 'HF_TOKEN' in content and len(content.strip()) > 20:
+            if 'HF_TOKEN' in content:
                 print("✅ Hugging Face token configured")
                 return True
             else:
-                print("❌ HF_TOKEN not found or invalid in secrets.toml")
+                print("❌ HF_TOKEN not found in secrets.toml")
                 return False
     except Exception as e:
-        print(f"❌ Error reading secrets file: {e}")
+        print("❌ Error reading secrets file")
         return False
 
 def create_temp_directory():
@@ -100,11 +99,14 @@ def launch_app(app_file="app.py"):
         subprocess.run([sys.executable, "-m", "streamlit", "run", app_file], check=True)
     except KeyboardInterrupt:
         print("\n👋 Application stopped by user")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Error launching application: {e}")
+    except subprocess.CalledProcessError:
+        print("❌ Error launching application")
         return False
     except FileNotFoundError:
         print("❌ Streamlit not found. Install it with: pip install streamlit")
+        return False
+    except Exception:
+        print("❌ Unexpected error occurred while launching application")
         return False
     
     return True

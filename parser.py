@@ -8,6 +8,13 @@ import docx
 from pptx import Presentation
 from bs4 import BeautifulSoup
 import csv
+import zipfile
+import base64
+from docx.document import Document
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
+from docx.table import _Cell, Table
+from docx.text.paragraph import Paragraph
 
 # Create a directory to store extracted images
 try:
@@ -56,7 +63,7 @@ def _parse_pdf(file_bytes):
     all_text = ""
     all_tables = []
     image_files = []
-    metadata = {"pages": 0, "extraction_method": "pdfplumber + fitz"}
+    metadata = {"pages": 0, "extraction_method": "pdfplumber + fitz", "images_found": 0}
     
     try:
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
@@ -99,10 +106,17 @@ def _parse_pdf(file_bytes):
                         image_bytes = base_image["image"]
                         image_ext = base_image["ext"]
                         
-                        image_filename = f"temp_images/img_p{page_index+1}_{img_index}.{image_ext}"
-                        with Image.open(io.BytesIO(image_bytes)) as pil_img:
-                            pil_img.save(image_filename)
-                        image_filenames.add(image_filename)
+                        # Sanitize filename to prevent path traversal
+                        safe_ext = re.sub(r'[^a-zA-Z0-9]', '', str(image_ext))
+                        if not safe_ext:
+                            safe_ext = 'png'
+                        
+                        image_filename = os.path.join("temp_images", f"pdf_p{page_index+1}_{img_index}.{safe_ext}")
+                        
+                        # Validate and save image
+                        if _validate_and_save_image(image_bytes, image_filename):
+                            image_filenames.add(image_filename)
+                            
                     except (IOError, OSError) as e:
                         print(f"Image file error: {e}")
                     except Exception as e:
@@ -112,6 +126,8 @@ def _parse_pdf(file_bytes):
 
     image_files = sorted(list(image_filenames))
     
+    metadata["images_found"] = len(image_files)
+    
     return {
         "full_text": all_text,
         "tables": all_tables,
@@ -120,13 +136,17 @@ def _parse_pdf(file_bytes):
     }
 
 def _parse_docx(file_bytes):
-    """Enhanced DOCX parser with table detection and structuring."""
+    """Enhanced DOCX parser with image extraction and table detection."""
     all_text = ""
     all_tables = []
+    image_files = []
     metadata = {"extraction_method": "python-docx", "tables_found": 0}
     
     try:
         doc = docx.Document(io.BytesIO(file_bytes))
+        
+        # Extract images from DOCX
+        image_files = _extract_docx_images(file_bytes)
         
         # Extract real tables first
         for table in doc.tables:
@@ -157,7 +177,8 @@ def _parse_docx(file_bytes):
                         cleaned_row = [cell.strip() for cell in row if cell.strip()]
                         if len(cleaned_row) > 1:
                             current_csv_table.append(cleaned_row)
-                except:
+                except (ValueError, csv.Error):
+                    # Skip invalid CSV data
                     pass
             else:
                 if current_csv_table:
@@ -169,6 +190,7 @@ def _parse_docx(file_bytes):
             all_tables.append(current_csv_table)
         
         metadata["tables_found"] = len(all_tables)
+        metadata["images_found"] = len(image_files)
             
     except Exception as e:
         print(f"Error parsing DOCX: {e}")
@@ -177,19 +199,23 @@ def _parse_docx(file_bytes):
     return {
         "full_text": clean_text(all_text),
         "tables": all_tables,
-        "image_files": [],
+        "image_files": image_files,
         "metadata": metadata
     }
 
 def _parse_pptx(file_bytes):
-    """Enhanced PPTX parser with slide structure preservation."""
+    """Enhanced PPTX parser with image extraction and slide structure preservation."""
     all_text = ""
     all_tables = []
+    image_files = []
     metadata = {"extraction_method": "python-pptx", "slides": 0}
     
     try:
         prs = Presentation(io.BytesIO(file_bytes))
         metadata["slides"] = len(prs.slides)
+        
+        # Extract images from PPTX
+        image_files = _extract_pptx_images(file_bytes)
         
         for slide_idx, slide in enumerate(prs.slides):
             slide_text = f"--- SLIDE {slide_idx + 1} ---\n"
@@ -209,6 +235,8 @@ def _parse_pptx(file_bytes):
             
             slide_text += f"--- END SLIDE {slide_idx + 1} ---\n\n"
             all_text += slide_text
+        
+        metadata["images_found"] = len(image_files)
             
     except Exception as e:
         print(f"Error parsing PPTX: {e}")
@@ -217,7 +245,7 @@ def _parse_pptx(file_bytes):
     return {
         "full_text": clean_text(all_text),
         "tables": all_tables,
-        "image_files": [],
+        "image_files": image_files,
         "metadata": metadata
     }
 
@@ -248,63 +276,18 @@ def _parse_txt(file_bytes):
                         cleaned_row = [cell.strip() for cell in row if cell.strip()]
                         if len(cleaned_row) > 1:
                             current_table.append(cleaned_row)
-                except:
+                except (ValueError, csv.Error):
                     pass
             else:
                 if current_table:
                     all_tables.append(current_table)
                     current_table = []
         
-        # Add final table
         if current_table:
             all_tables.append(current_table)
-        
-        metadata["tables_detected"] = len(all_tables)
-
+            
     except Exception as e:
         print(f"Error parsing TXT: {e}")
-        metadata["extraction_error"] = str(e)
-    
-    return {
-        "full_text": all_text,
-        "tables": all_tables,
-        "image_files": [],
-        "metadata": metadata
-    }
-
-def _parse_html(file_bytes):
-    """Enhanced HTML parser with better table extraction."""
-    all_text = ""
-    all_tables = []
-    metadata = {"extraction_method": "beautifulsoup"}
-    
-    try:
-        soup = BeautifulSoup(file_bytes, 'html.parser')
-        
-        # Remove script and style elements
-        for script in soup(["script", "style"]):
-            script.decompose()
-        
-        # Extract text
-        all_text = soup.get_text(separator='\n', strip=True)
-        
-        # Extract tables with structure preservation
-        for table in soup.find_all('table'):
-            table_data = []
-            
-            # Extract all rows
-            for row in table.find_all('tr'):
-                row_data = [cell.get_text(strip=True) for cell in row.find_all(['td', 'th'])]
-                if row_data:
-                    table_data.append(row_data)
-            
-            if table_data:
-                all_tables.append(table_data)
-        
-        metadata["tables_found"] = len(all_tables)
-            
-    except Exception as e:
-        print(f"Error parsing HTML: {e}")
         metadata["extraction_error"] = str(e)
     
     return {
@@ -314,54 +297,81 @@ def _parse_html(file_bytes):
         "metadata": metadata
     }
 
-def _parse_csv(file_bytes):
-    """Parse CSV files with automatic delimiter detection."""
+def _parse_html(file_bytes):
+    """Enhanced HTML parser with table and image extraction."""
     all_text = ""
     all_tables = []
-    metadata = {"extraction_method": "csv_parser"}
+    image_files = []
+    metadata = {"extraction_method": "beautifulsoup"}
     
     try:
-        # Try different encodings
-        for encoding in ['utf-8', 'latin-1', 'cp1252']:
-            try:
-                text_content = file_bytes.decode(encoding)
-                break
-            except UnicodeDecodeError:
-                continue
-        else:
-            text_content = file_bytes.decode('utf-8', errors='ignore')
+        html_content = file_bytes.decode('utf-8', errors='ignore')
+        soup = BeautifulSoup(html_content, 'html.parser')
         
-        all_text = text_content
+        # Extract images from HTML
+        image_files = _extract_html_images(soup)
         
-        # Detect delimiter
-        sample = text_content[:1024]
-        delimiter = ','
-        if sample.count('\t') > sample.count(','):
-            delimiter = '\t'
-        elif sample.count(';') > sample.count(','):
-            delimiter = ';'
+        # Extract tables
+        tables = soup.find_all('table')
+        for table in tables:
+            table_data = []
+            rows = table.find_all('tr')
+            for row in rows:
+                cells = row.find_all(['td', 'th'])
+                row_data = [cell.get_text().strip() for cell in cells]
+                if row_data:
+                    table_data.append(row_data)
+            
+            if table_data:
+                all_tables.append(table_data)
         
-        # Parse CSV
-        f = io.StringIO(text_content)
-        reader = csv.reader(f, delimiter=delimiter)
+        # Extract text content
+        all_text = soup.get_text()
+        
+        metadata["tables_found"] = len(all_tables)
+        metadata["images_found"] = len(image_files)
+        
+    except Exception as e:
+        print(f"Error parsing HTML: {e}")
+        metadata["extraction_error"] = str(e)
+    
+    return {
+        "full_text": clean_text(all_text),
+        "tables": all_tables,
+        "image_files": image_files,
+        "metadata": metadata
+    }
+
+def _parse_csv(file_bytes):
+    """Enhanced CSV parser."""
+    all_text = ""
+    all_tables = []
+    metadata = {"extraction_method": "csv_reader"}
+    
+    try:
+        csv_content = file_bytes.decode('utf-8', errors='ignore')
+        all_text = csv_content
+        
+        # Parse CSV data
+        f = io.StringIO(csv_content)
+        reader = csv.reader(f)
         table_data = []
         
         for row in reader:
-            if row:  # Skip empty rows
-                table_data.append([cell.strip() for cell in row])
+            cleaned_row = [cell.strip() for cell in row]
+            table_data.append(cleaned_row)
         
         if table_data:
             all_tables.append(table_data)
         
-        metadata["delimiter_detected"] = delimiter
-        metadata["rows_parsed"] = len(table_data)
+        metadata["tables_found"] = len(all_tables)
         
     except Exception as e:
         print(f"Error parsing CSV: {e}")
         metadata["extraction_error"] = str(e)
     
     return {
-        "full_text": all_text,
+        "full_text": clean_text(all_text),
         "tables": all_tables,
         "image_files": [],
         "metadata": metadata
@@ -369,15 +379,147 @@ def _parse_csv(file_bytes):
 
 def _is_structured_data(text):
     """Detect if text contains structured data patterns."""
-    if not text:
+    if not text or len(text) < 10:
         return False
     
     # Check for common delimiters
-    comma_count = text.count(',')
-    tab_count = text.count('\t')
-    pipe_count = text.count('|')
-    semicolon_count = text.count(';')
+    delimiters = [',', '\t', '|', ';']
+    for delimiter in delimiters:
+        if text.count(delimiter) >= 2:
+            return True
     
-    # Heuristics for structured data
-    return (comma_count >= 2 or tab_count >= 2 or 
-            pipe_count >= 2 or semicolon_count >= 2)
+    # Check for key-value patterns
+    if ':' in text and ('=' in text or text.count(':') >= 2):
+        return True
+    
+    return False
+
+def _extract_docx_images(file_bytes):
+    """Extract images from DOCX file."""
+    image_files = []
+    
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes), 'r') as docx_zip:
+            # Look for images in the media folder
+            for file_info in docx_zip.filelist:
+                if file_info.filename.startswith('word/media/'):
+                    # Extract image
+                    image_data = docx_zip.read(file_info.filename)
+                    
+                    # Get file extension
+                    _, ext = os.path.splitext(file_info.filename)
+                    if not ext:
+                        ext = '.png'  # Default extension
+                    
+                    # Create safe filename
+                    safe_filename = f"docx_img_{len(image_files)}{ext}"
+                    image_path = os.path.join("temp_images", safe_filename)
+                    
+                    # Validate and save image
+                    if _validate_and_save_image(image_data, image_path):
+                        image_files.append(image_path)
+                        
+    except Exception as e:
+        print(f"Error extracting DOCX images: {e}")
+    
+    return image_files
+
+def _extract_pptx_images(file_bytes):
+    """Extract images from PPTX file."""
+    image_files = []
+    
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes), 'r') as pptx_zip:
+            # Look for images in the media folder
+            for file_info in pptx_zip.filelist:
+                if file_info.filename.startswith('ppt/media/'):
+                    # Extract image
+                    image_data = pptx_zip.read(file_info.filename)
+                    
+                    # Get file extension
+                    _, ext = os.path.splitext(file_info.filename)
+                    if not ext:
+                        ext = '.png'  # Default extension
+                    
+                    # Create safe filename
+                    safe_filename = f"pptx_img_{len(image_files)}{ext}"
+                    image_path = os.path.join("temp_images", safe_filename)
+                    
+                    # Validate and save image
+                    if _validate_and_save_image(image_data, image_path):
+                        image_files.append(image_path)
+                        
+    except Exception as e:
+        print(f"Error extracting PPTX images: {e}")
+    
+    return image_files
+
+def _extract_html_images(soup):
+    """Extract images from HTML content."""
+    image_files = []
+    
+    try:
+        # Find all img tags
+        img_tags = soup.find_all('img')
+        
+        for i, img in enumerate(img_tags):
+            src = img.get('src', '')
+            
+            # Handle base64 encoded images
+            if src.startswith('data:image/'):
+                try:
+                    # Extract base64 data
+                    header, data = src.split(',', 1)
+                    image_data = base64.b64decode(data)
+                    
+                    # Determine file extension from header
+                    if 'jpeg' in header or 'jpg' in header:
+                        ext = '.jpg'
+                    elif 'png' in header:
+                        ext = '.png'
+                    elif 'gif' in header:
+                        ext = '.gif'
+                    else:
+                        ext = '.png'  # Default
+                    
+                    # Create safe filename
+                    safe_filename = f"html_img_{i}{ext}"
+                    image_path = os.path.join("temp_images", safe_filename)
+                    
+                    # Validate and save image
+                    if _validate_and_save_image(image_data, image_path):
+                        image_files.append(image_path)
+                        
+                except Exception as e:
+                    print(f"Error processing base64 image {i}: {e}")
+                    
+    except Exception as e:
+        print(f"Error extracting HTML images: {e}")
+    
+    return image_files
+
+def _validate_and_save_image(image_data, image_path):
+    """Validate image data and save if valid."""
+    try:
+        # Validate image data
+        if len(image_data) < 100:  # Too small to be a valid image
+            return False
+        
+        # Try to open with PIL to validate
+        with Image.open(io.BytesIO(image_data)) as img:
+            # Check image dimensions
+            if img.width < 10 or img.height < 10:
+                return False
+            
+            # Convert to RGB if necessary
+            if img.mode in ('RGBA', 'LA', 'P'):
+                img = img.convert('RGB')
+            
+            # Save the image
+            img.save(image_path, format='PNG', optimize=True)
+            return True
+            
+    except Exception as e:
+        print(f"Error validating/saving image: {e}")
+        return False
+
