@@ -14,7 +14,7 @@ Transform unstructured documents into structured, queryable data using advanced 
 ## 📋 Requirements
 
 - Python 3.8+
-- Hugging Face API Token (free)
+- Google Gemini API Key (free)
 
 ## 🛠️ Quick Setup
 
@@ -25,13 +25,13 @@ cd final_project
 pip install -r requirements.txt
 ```
 
-### 2. Configure Hugging Face Token
+### 2. Configure Gemini API Key
 Create `.streamlit/secrets.toml`:
 ```toml
-HF_TOKEN = "your_hugging_face_token_here"
+GEMINI_API_KEY = "your_gemini_api_key_here"
 ```
 
-**Get your free token at:** https://huggingface.co/settings/tokens
+**Get your free API key at:** https://aistudio.google.com/apikey
 
 ### 3. Run Application
 ```bash
@@ -55,7 +55,7 @@ final_project/
 ├── requirements.txt       # Dependencies
 └── .streamlit/           # Configuration
     ├── config.toml
-    └── secrets.toml      # Your HF token here
+    └── secrets.toml      # Your Gemini API key here
 ```
 
 ## 🎯 Usage
@@ -68,17 +68,17 @@ final_project/
 
 ## 🔧 Configuration
 
-### Hugging Face Token Setup
-1. Visit https://huggingface.co/settings/tokens
-2. Create a new token (read access is sufficient)
+### Gemini API Key Setup
+1. Visit https://aistudio.google.com/apikey
+2. Create a new API key.
 3. Add to `.streamlit/secrets.toml`:
    ```toml
-   HF_TOKEN = "hf_your_token_here"
+   GEMINI_API_KEY = "your_gemini_api_key_here"
    ```
 
 ### Alternative: Environment Variable
 ```bash
-export HF_TOKEN="your_token_here"
+export GEMINI_API_KEY="your_gemini_api_key_here"
 ```
 
 ## 📊 Supported Formats
@@ -124,8 +124,8 @@ MIT License - see LICENSE file for details.
 
 ### Common Issues
 
-**"HF_TOKEN not found"**
-- Ensure `.streamlit/secrets.toml` exists with your token
+**"GEMINI_API_KEY not found"**
+- Ensure `.streamlit/secrets.toml` exists with your API key.
 
 **"Module not found"**
 - Run: `pip install -r requirements.txt`

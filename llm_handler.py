@@ -1,97 +1,65 @@
 import streamlit as st
-import requests
 import os
 import logging
-import time
+import google.generativeai as genai
+from PIL import Image
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class HuggingFaceClient:
+class GeminiClient:
     def __init__(self):
-        self.token = self._get_token()
-        self.headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
-        self.base_url = "https://api-inference.huggingface.co/models/"
-        
-    def _get_token(self):
-        """Securely get HF token from secrets or environment"""
-        try:
-            # Try Streamlit secrets first
-            return st.secrets["HF_TOKEN"]
-        except (KeyError, AttributeError):
-            # Fallback to environment variable
-            token = os.getenv("HF_TOKEN")
-            if not token:
-                logger.warning("HF_TOKEN not found. AI features will be limited.")
-            return token
-    
-    def _query_api(self, model, payload, retries=3):
-        """Query HF API with retry logic"""
-        if not self.token:
-            return None
-            
-        url = self.base_url + model
-        
-        for attempt in range(retries):
-            try:
-                response = requests.post(url, headers=self.headers, json=payload, timeout=30)
-                
-                if response.status_code == 200:
-                    return response.json()
-                elif response.status_code == 503:
-                    if attempt < retries - 1:
-                        time.sleep(2 ** attempt)
-                        continue
-                    return {"error": "Model loading"}
-                elif response.status_code == 410:
-                    logger.warning(f"Model {model} is deprecated, trying alternative")
-                    return {"error": "Model deprecated"}
-                else:
-                    logger.error(f"API error: {response.status_code}")
-                    return None
-                    
-            except requests.RequestException as e:
-                logger.error(f"Request failed: {e}")
-                if attempt == retries - 1:
-                    return None
-                time.sleep(1)
-        
-        return None
+        self.api_key = self._get_api_key()
+        if self.api_key:
+            genai.configure(api_key=self.api_key)
+            self.model = genai.GenerativeModel('gemini-pro')
+            self.vision_model = genai.GenerativeModel('gemini-pro-vision')
 
-# Initialize client
-hf_client = HuggingFaceClient()
+    def _get_api_key(self):
+        """Securely get Gemini API key from secrets or environment"""
+        try:
+            return st.secrets["GEMINI_API_KEY"]
+        except (KeyError, AttributeError):
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                logger.warning("GEMINI_API_KEY not found. AI features will be limited.")
+            return api_key
+
+    def generate_text(self, prompt):
+        """Generate text using the Gemini Pro model"""
+        if not self.api_key:
+            return None
+        try:
+            response = self.model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            logger.error(f"Gemini text generation failed: {e}")
+            return None
+
+    def describe_image(self, image_path, prompt):
+        """Generate a description for an image using Gemini Pro Vision"""
+        if not self.api_key:
+            return None
+        try:
+            img = Image.open(image_path)
+            response = self.vision_model.generate_content([prompt, img])
+            return response.text
+        except Exception as e:
+            logger.error(f"Gemini image description failed: {e}")
+            return None
+
+gemini_client = GeminiClient()
 
 def get_text_response(prompt, context):
-    """Generate AI response using HuggingFace with latest models"""
-    if not hf_client.token:
-        return "AI service not configured. Please add HF_TOKEN to secrets.toml"
+    """Generate AI response using Google Gemini"""
+    if not gemini_client.api_key:
+        return "AI service not configured. Please add GEMINI_API_KEY to secrets.toml"
     
-    model = "google/flan-t5-large"
+    full_prompt = f"Context: {context[:4000]}\n\nQuestion: {prompt}\nAnswer:"
+    response = gemini_client.generate_text(full_prompt)
     
-    # Simple prompt for better results
-    simple_prompt = f"Context: {context[:400]}\n\nQuestion: {prompt}\nAnswer:"
-    
-    try:
-        payload = {
-            "inputs": simple_prompt,
-            "parameters": {
-                "max_new_tokens": 100,
-                "temperature": 0.3,
-                "do_sample": False,
-                "return_full_text": False
-            }
-        }
-
-        result = hf_client._query_api(model, payload)
-
-        if result and "error" not in result and isinstance(result, list):
-            if len(result) > 0 and "generated_text" in result[0]:
-                response = result[0]["generated_text"].strip()
-                if response and len(response) > 5:
-                    return response
-    except Exception as e:
-        logger.warning(f"Model {model} failed: {e}")
+    if response:
+        return response
     
     return _get_smart_response(prompt, context)
 
@@ -99,110 +67,42 @@ def _get_smart_response(prompt, context):
     """Smart rule-based responses when AI is unavailable"""
     prompt_lower = prompt.lower()
     
-    # Extract column names for column-related queries
-    if any(word in prompt_lower for word in ['column', 'field', 'extract']):
-        # Simple column extraction logic
-        words = prompt_lower.split()
-        potential_columns = []
-        
-        # Look for common column indicators
-        column_keywords = ['sales', 'revenue', 'profit', 'date', 'time', 'region', 'category', 'product', 'name', 'id', 'amount', 'price', 'cost']
-        
-        for word in words:
-            if word in column_keywords:
-                potential_columns.append(word.title())
-        
-        if potential_columns:
-            return f"Found potential columns: {', '.join(potential_columns)}. Check the available columns in the data preview."
-    
-    # Context-aware responses
     if "what" in prompt_lower:
         if "about" in prompt_lower:
             return f"This document appears to contain: {context[:150]}..."
-        elif "column" in prompt_lower:
-            return "This document contains structured data with multiple columns. Check the Analytics section to see all available columns."
-    elif "how many" in prompt_lower:
-        return "The document contains structured data. Visit the Analytics section to see row and column counts."
     elif "summary" in prompt_lower or "summarize" in prompt_lower:
         sentences = context.split('.')[:3]
         return f"Summary: {'. '.join(sentences)}..."
-    elif "table" in prompt_lower:
-        return "This document contains data tables. Use the Analytics page to explore and visualize the data."
-    elif "extract" in prompt_lower and "column" in prompt_lower:
-        return "To extract columns, describe what type of data you're looking for (e.g., 'sales data', 'date columns', 'financial information')."
     
-    return "AI service temporarily unavailable. Try: 'What is this about?', 'Summarize the content', or use the Analytics section to explore data directly."
+    return "AI service temporarily unavailable. Try asking a different question."
 
 def get_image_descriptions(image_paths):
-    """Get image descriptions using HuggingFace with latest models"""
+    """Get image descriptions using Google Gemini"""
     descriptions = []
-    model = "Salesforce/blip-image-captioning-large"
     
     for img_path in image_paths:
-        if not hf_client.token:
+        if not gemini_client.api_key:
             descriptions.append({
                 "path": img_path,
                 "description": "AI image analysis not configured"
             })
             continue
-            
-        desc = _get_basic_image_description(img_path)
-        try:
-            # Validate path
-            safe_path = os.path.abspath(img_path)
-            temp_dir = os.path.abspath("temp_images")
-            if not safe_path.startswith(temp_dir):
-                descriptions.append({"path": img_path, "description": "Invalid image path"})
-                continue
-                
-            with open(safe_path, "rb") as f:
-                img_data = f.read()
-            
-            response = requests.post(
-                hf_client.base_url + model,
-                headers=hf_client.headers,
-                data=img_data,
-                timeout=20
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if isinstance(result, list) and len(result) > 0:
-                    generated_desc = result[0].get("generated_text", "")
-                    if generated_desc and len(generated_desc) > 5:
-                        desc = generated_desc
-            elif response.status_code != 410:  # Not deprecated
-                logger.warning(f"Image model {model} returned {response.status_code}")
-                
-        except (requests.RequestException, IOError, OSError) as e:
-            logger.error(f"Image processing error: {e}")
-            desc = "Image processing failed"
+
+        prompt = "Describe this image in detail."
+        description = gemini_client.describe_image(img_path, prompt)
         
-        descriptions.append({"path": img_path, "description": desc})
+        if not description:
+            description = _get_basic_image_description(img_path)
+
+        descriptions.append({"path": img_path, "description": description})
     
     return descriptions
 
 def _get_basic_image_description(img_path):
     """Generate basic image description from filename and properties"""
     try:
-        from PIL import Image
-        
         filename = os.path.basename(img_path)
-        
-        with Image.open(img_path) as img:
-            width, height = img.size
-            format_name = img.format or "Unknown"
-            
-            # Basic description based on properties
-            if width > height:
-                orientation = "landscape"
-            elif height > width:
-                orientation = "portrait"
-            else:
-                orientation = "square"
-            
-            return f"{format_name} image ({width}x{height}, {orientation} orientation)"
-            
+        return f"Image file: {filename}"
     except Exception:
         return "Image file extracted from document"
 
@@ -223,7 +123,6 @@ def get_specific_table_indices(prompt, tables_as_text, num_tables):
     if "all" in prompt_lower:
         return "all"
     
-    # Extract table numbers
     numbers = re.findall(r'table\s*(\d+)', prompt_lower)
     if not numbers:
         numbers = re.findall(r'\b(\d+)\b', prompt)

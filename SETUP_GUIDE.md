@@ -7,17 +7,15 @@
 pip install -r requirements.txt
 ```
 
-### 2. Get Hugging Face Token (FREE)
-1. Go to https://huggingface.co/settings/tokens
-2. Click "New token"
-3. Name it "ArixStructure" 
-4. Select "Read" access
-5. Copy the token (starts with `hf_`)
+### 2. Get Google Gemini API Key (FREE)
+1. Go to https://aistudio.google.com/apikey
+2. Click "Create API key"
+3. Copy the key.
 
-### 3. Configure Token
+### 3. Configure API Key
 Create `.streamlit/secrets.toml`:
 ```toml
-HF_TOKEN = "hf_your_actual_token_here"
+GEMINI_API_KEY = "your_gemini_api_key_here"
 ```
 
 ### 4. Run Application
@@ -25,21 +23,21 @@ HF_TOKEN = "hf_your_actual_token_here"
 python start.py
 ```
 
-## Alternative Token Setup
+## Alternative API Key Setup
 
 ### Option 1: Environment Variable
 ```bash
 # Windows
-set HF_TOKEN=hf_your_token_here
+set GEMINI_API_KEY=your_gemini_api_key_here
 
 # Linux/Mac
-export HF_TOKEN=hf_your_token_here
+export GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ### Option 2: .env File
 Create `.env` file:
 ```
-HF_TOKEN=hf_your_token_here
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ## Verification
@@ -51,10 +49,8 @@ python -c "import streamlit as st; print('✅ Setup complete!')"
 
 ## Troubleshooting
 
-**Token not working?**
-- Ensure token starts with `hf_`
+**API Key not working?**
 - Check for extra spaces in secrets.toml
-- Verify token has "Read" permissions
 
 **Import errors?**
 - Run: `pip install -r requirements.txt`
