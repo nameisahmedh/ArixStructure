@@ -67,71 +67,33 @@ def get_text_response(prompt, context):
     if not hf_client.token:
         return "AI service not configured. Please add HF_TOKEN to secrets.toml"
     
-    # Use latest working models (2024)
-    models_to_try = [
-        "microsoft/DialoGPT-medium",
-        "facebook/blenderbot_small-90M", 
-        "HuggingFaceH4/zephyr-7b-beta",
-        "microsoft/DialoGPT-large",
-        "facebook/opt-350m"
-    ]
+    model = "google/flan-t5-large"
     
     # Simple prompt for better results
     simple_prompt = f"Context: {context[:400]}\n\nQuestion: {prompt}\nAnswer:"
     
-    for model in models_to_try:
-        try:
-            payload = {
-                "inputs": simple_prompt,
-                "parameters": {
-                    "max_new_tokens": 100,
-                    "temperature": 0.3,
-                    "do_sample": False,
-                    "return_full_text": False
-                }
-            }
-            
-            result = hf_client._query_api(model, payload)
-            
-            if result and "error" not in result and isinstance(result, list):
-                if len(result) > 0 and "generated_text" in result[0]:
-                    response = result[0]["generated_text"].strip()
-                    if response and len(response) > 5:
-                        return response
-        except Exception as e:
-            logger.warning(f"Model {model} failed: {e}")
-            continue
-    
-    # Try summarization with newer models
-    summarization_models = [
-        "facebook/bart-large-cnn",
-        "sshleifer/distilbart-cnn-12-6",
-        "t5-small"
-    ]
-    
-    if len(context) > 100:
-        for model in summarization_models:
-            try:
-                payload = {
-                    "inputs": context[:1000],
-                    "parameters": {"max_length": 100, "min_length": 20}
-                }
-                
-                result = hf_client._query_api(model, payload)
-                
-                if result and isinstance(result, list) and len(result) > 0:
-                    summary = result[0].get("summary_text", "")
-                    if summary:
-                        return f"Based on the document: {summary}"
-            except:
-                continue
-    
-    # Use offline AI as fallback
     try:
-        from offline_ai import offline_ai
-        return offline_ai.analyze_text(prompt, context)
-    except ImportError:
-        return _get_smart_response(prompt, context)
+        payload = {
+            "inputs": simple_prompt,
+            "parameters": {
+                "max_new_tokens": 100,
+                "temperature": 0.3,
+                "do_sample": False,
+                "return_full_text": False
+            }
+        }
+
+        result = hf_client._query_api(model, payload)
+
+        if result and "error" not in result and isinstance(result, list):
+            if len(result) > 0 and "generated_text" in result[0]:
+                response = result[0]["generated_text"].strip()
+                if response and len(response) > 5:
+                    return response
+    except Exception as e:
+        logger.warning(f"Model {model} failed: {e}")
+    
+    return _get_smart_response(prompt, context)
 
 def _get_smart_response(prompt, context):
     """Smart rule-based responses when AI is unavailable"""
@@ -174,14 +136,7 @@ def _get_smart_response(prompt, context):
 def get_image_descriptions(image_paths):
     """Get image descriptions using HuggingFace with latest models"""
     descriptions = []
-    
-    # Latest working image captioning models
-    image_models = [
-        "Salesforce/blip-image-captioning-large",
-        "Salesforce/blip-image-captioning-base", 
-        "nlpconnect/vit-gpt2-image-captioning",
-        "microsoft/git-large-coco"
-    ]
+    model = "Salesforce/blip-image-captioning-large"
     
     for img_path in image_paths:
         if not hf_client.token:
@@ -191,6 +146,7 @@ def get_image_descriptions(image_paths):
             })
             continue
             
+        desc = _get_basic_image_description(img_path)
         try:
             # Validate path
             safe_path = os.path.abspath(img_path)
@@ -202,35 +158,21 @@ def get_image_descriptions(image_paths):
             with open(safe_path, "rb") as f:
                 img_data = f.read()
             
-            # Try offline AI first
-            try:
-                from offline_ai import offline_ai
-                desc = offline_ai.describe_image(img_path)
-            except ImportError:
-                desc = _get_basic_image_description(img_path)
+            response = requests.post(
+                hf_client.base_url + model,
+                headers=hf_client.headers,
+                data=img_data,
+                timeout=20
+            )
             
-            # Try different models
-            for model in image_models:
-                try:
-                    response = requests.post(
-                        hf_client.base_url + model,
-                        headers=hf_client.headers,
-                        data=img_data,
-                        timeout=20
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        if isinstance(result, list) and len(result) > 0:
-                            generated_desc = result[0].get("generated_text", "")
-                            if generated_desc and len(generated_desc) > 5:
-                                desc = generated_desc
-                                break
-                    elif response.status_code != 410:  # Not deprecated
-                        logger.warning(f"Image model {model} returned {response.status_code}")
-                except Exception as e:
-                    logger.warning(f"Image model {model} failed: {e}")
-                    continue
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, list) and len(result) > 0:
+                    generated_desc = result[0].get("generated_text", "")
+                    if generated_desc and len(generated_desc) > 5:
+                        desc = generated_desc
+            elif response.status_code != 410:  # Not deprecated
+                logger.warning(f"Image model {model} returned {response.status_code}")
                 
         except (requests.RequestException, IOError, OSError) as e:
             logger.error(f"Image processing error: {e}")

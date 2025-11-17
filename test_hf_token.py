@@ -33,11 +33,7 @@ def test_hf_token():
     
     # Try latest working models
     test_models = [
-        "microsoft/DialoGPT-medium",
-        "facebook/blenderbot_small-90M",
-        "HuggingFaceH4/zephyr-7b-beta",
-        "facebook/opt-350m",
-        "sshleifer/distilbart-cnn-12-6"
+        "google/flan-t5-large",
     ]
     
     for model in test_models:
