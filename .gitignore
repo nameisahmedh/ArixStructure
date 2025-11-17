@@ -47,3 +47,6 @@ Thumbs.db
 
 # Streamlit
 .streamlit/secrets.toml
+
+.github/instructions/kluster-code-verify.instructions.md
+.kluster

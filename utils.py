@@ -1113,8 +1113,9 @@ def save_plot_as_image(fig, filename, format="png"):
             os.makedirs(temp_dir)
         
         # Validate temp directory is safe
-        temp_dir = os.path.normpath(temp_dir)
-        if not temp_dir.startswith(os.getcwd()):
+        temp_dir_abs = os.path.abspath(temp_dir)
+        current_dir = os.path.abspath(os.getcwd())
+        if not temp_dir_abs.startswith(current_dir):
             raise ValueError("Invalid temp directory")
         
         # Optimize image settings based on format

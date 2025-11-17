@@ -41,9 +41,12 @@ class HuggingFaceClient:
                     return response.json()
                 elif response.status_code == 503:
                     if attempt < retries - 1:
-                        time.sleep(2 ** attempt)  # Exponential backoff
+                        time.sleep(2 ** attempt)
                         continue
                     return {"error": "Model loading"}
+                elif response.status_code == 410:
+                    logger.warning(f"Model {model} is deprecated, trying alternative")
+                    return {"error": "Model deprecated"}
                 else:
                     logger.error(f"API error: {response.status_code}")
                     return None
@@ -60,59 +63,136 @@ class HuggingFaceClient:
 hf_client = HuggingFaceClient()
 
 def get_text_response(prompt, context):
-    """Generate AI response using HuggingFace"""
+    """Generate AI response using HuggingFace with latest models"""
     if not hf_client.token:
         return "AI service not configured. Please add HF_TOKEN to secrets.toml"
     
-    # Use text generation model
-    payload = {
-        "inputs": f"Context: {context[:800]}\n\nQuestion: {prompt}\n\nAnswer:",
-        "parameters": {
-            "max_new_tokens": 200,
-            "temperature": 0.7,
-            "return_full_text": False
-        }
-    }
+    # Use latest working models (2024)
+    models_to_try = [
+        "microsoft/DialoGPT-medium",
+        "facebook/blenderbot_small-90M", 
+        "HuggingFaceH4/zephyr-7b-beta",
+        "microsoft/DialoGPT-large",
+        "facebook/opt-350m"
+    ]
     
-    result = hf_client._query_api("microsoft/DialoGPT-medium", payload)
+    # Simple prompt for better results
+    simple_prompt = f"Context: {context[:400]}\n\nQuestion: {prompt}\nAnswer:"
     
-    if result:
-        if isinstance(result, list) and len(result) > 0:
-            return result[0].get("generated_text", "").strip()
-        elif "error" in result:
-            if result["error"] == "Model loading":
-                return "AI model is starting up. Please try again in a moment."
+    for model in models_to_try:
+        try:
+            payload = {
+                "inputs": simple_prompt,
+                "parameters": {
+                    "max_new_tokens": 100,
+                    "temperature": 0.3,
+                    "do_sample": False,
+                    "return_full_text": False
+                }
+            }
+            
+            result = hf_client._query_api(model, payload)
+            
+            if result and "error" not in result and isinstance(result, list):
+                if len(result) > 0 and "generated_text" in result[0]:
+                    response = result[0]["generated_text"].strip()
+                    if response and len(response) > 5:
+                        return response
+        except Exception as e:
+            logger.warning(f"Model {model} failed: {e}")
+            continue
     
-    # Fallback to summarization for document questions
-    if "what" in prompt.lower() and "about" in prompt.lower():
-        payload = {
-            "inputs": context[:1000],
-            "parameters": {"max_length": 100, "min_length": 20}
-        }
+    # Try summarization with newer models
+    summarization_models = [
+        "facebook/bart-large-cnn",
+        "sshleifer/distilbart-cnn-12-6",
+        "t5-small"
+    ]
+    
+    if len(context) > 100:
+        for model in summarization_models:
+            try:
+                payload = {
+                    "inputs": context[:1000],
+                    "parameters": {"max_length": 100, "min_length": 20}
+                }
+                
+                result = hf_client._query_api(model, payload)
+                
+                if result and isinstance(result, list) and len(result) > 0:
+                    summary = result[0].get("summary_text", "")
+                    if summary:
+                        return f"Based on the document: {summary}"
+            except:
+                continue
+    
+    # Use offline AI as fallback
+    try:
+        from offline_ai import offline_ai
+        return offline_ai.analyze_text(prompt, context)
+    except ImportError:
+        return _get_smart_response(prompt, context)
+
+def _get_smart_response(prompt, context):
+    """Smart rule-based responses when AI is unavailable"""
+    prompt_lower = prompt.lower()
+    
+    # Extract column names for column-related queries
+    if any(word in prompt_lower for word in ['column', 'field', 'extract']):
+        # Simple column extraction logic
+        words = prompt_lower.split()
+        potential_columns = []
         
-        result = hf_client._query_api("facebook/bart-large-cnn", payload)
+        # Look for common column indicators
+        column_keywords = ['sales', 'revenue', 'profit', 'date', 'time', 'region', 'category', 'product', 'name', 'id', 'amount', 'price', 'cost']
         
-        if result and isinstance(result, list) and len(result) > 0:
-            summary = result[0].get("summary_text", "")
-            if summary:
-                return f"This document is about: {summary}"
+        for word in words:
+            if word in column_keywords:
+                potential_columns.append(word.title())
+        
+        if potential_columns:
+            return f"Found potential columns: {', '.join(potential_columns)}. Check the available columns in the data preview."
     
-    return "Unable to process your question at the moment. Please try again."
+    # Context-aware responses
+    if "what" in prompt_lower:
+        if "about" in prompt_lower:
+            return f"This document appears to contain: {context[:150]}..."
+        elif "column" in prompt_lower:
+            return "This document contains structured data with multiple columns. Check the Analytics section to see all available columns."
+    elif "how many" in prompt_lower:
+        return "The document contains structured data. Visit the Analytics section to see row and column counts."
+    elif "summary" in prompt_lower or "summarize" in prompt_lower:
+        sentences = context.split('.')[:3]
+        return f"Summary: {'. '.join(sentences)}..."
+    elif "table" in prompt_lower:
+        return "This document contains data tables. Use the Analytics page to explore and visualize the data."
+    elif "extract" in prompt_lower and "column" in prompt_lower:
+        return "To extract columns, describe what type of data you're looking for (e.g., 'sales data', 'date columns', 'financial information')."
+    
+    return "AI service temporarily unavailable. Try: 'What is this about?', 'Summarize the content', or use the Analytics section to explore data directly."
 
 def get_image_descriptions(image_paths):
-    """Get image descriptions using HuggingFace"""
+    """Get image descriptions using HuggingFace with latest models"""
     descriptions = []
+    
+    # Latest working image captioning models
+    image_models = [
+        "Salesforce/blip-image-captioning-large",
+        "Salesforce/blip-image-captioning-base", 
+        "nlpconnect/vit-gpt2-image-captioning",
+        "microsoft/git-large-coco"
+    ]
     
     for img_path in image_paths:
         if not hf_client.token:
             descriptions.append({
                 "path": img_path,
-                "description": "AI service not configured"
+                "description": "AI image analysis not configured"
             })
             continue
             
         try:
-            # Validate path to prevent traversal
+            # Validate path
             safe_path = os.path.abspath(img_path)
             temp_dir = os.path.abspath("temp_images")
             if not safe_path.startswith(temp_dir):
@@ -122,21 +202,35 @@ def get_image_descriptions(image_paths):
             with open(safe_path, "rb") as f:
                 img_data = f.read()
             
-            response = requests.post(
-                hf_client.base_url + "nlpconnect/vit-gpt2-image-captioning",
-                headers=hf_client.headers,
-                data=img_data,
-                timeout=30
-            )
+            # Try offline AI first
+            try:
+                from offline_ai import offline_ai
+                desc = offline_ai.describe_image(img_path)
+            except ImportError:
+                desc = _get_basic_image_description(img_path)
             
-            if response.status_code == 200:
-                result = response.json()
-                if isinstance(result, list) and len(result) > 0:
-                    desc = result[0].get("generated_text", "Visual content")
-                else:
-                    desc = "Visual content"
-            else:
-                desc = "Image analysis unavailable"
+            # Try different models
+            for model in image_models:
+                try:
+                    response = requests.post(
+                        hf_client.base_url + model,
+                        headers=hf_client.headers,
+                        data=img_data,
+                        timeout=20
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if isinstance(result, list) and len(result) > 0:
+                            generated_desc = result[0].get("generated_text", "")
+                            if generated_desc and len(generated_desc) > 5:
+                                desc = generated_desc
+                                break
+                    elif response.status_code != 410:  # Not deprecated
+                        logger.warning(f"Image model {model} returned {response.status_code}")
+                except Exception as e:
+                    logger.warning(f"Image model {model} failed: {e}")
+                    continue
                 
         except (requests.RequestException, IOError, OSError) as e:
             logger.error(f"Image processing error: {e}")
@@ -145,6 +239,30 @@ def get_image_descriptions(image_paths):
         descriptions.append({"path": img_path, "description": desc})
     
     return descriptions
+
+def _get_basic_image_description(img_path):
+    """Generate basic image description from filename and properties"""
+    try:
+        from PIL import Image
+        
+        filename = os.path.basename(img_path)
+        
+        with Image.open(img_path) as img:
+            width, height = img.size
+            format_name = img.format or "Unknown"
+            
+            # Basic description based on properties
+            if width > height:
+                orientation = "landscape"
+            elif height > width:
+                orientation = "portrait"
+            else:
+                orientation = "square"
+            
+            return f"{format_name} image ({width}x{height}, {orientation} orientation)"
+            
+    except Exception:
+        return "Image file extracted from document"
 
 def get_image_query_response(prompt, image_descriptions):
     """Answer questions about images"""

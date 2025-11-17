@@ -395,8 +395,19 @@ if st.session_state.doc_data:
                     df.columns = first_row
                     df = df.drop(df.index[0]).reset_index(drop=True)
             
-            # Ensure column names are strings
+            # Ensure column names are strings and unique
             df.columns = [str(col) for col in df.columns]
+            
+            # Handle duplicate column names
+            cols = df.columns.tolist()
+            seen = {}
+            for i, col in enumerate(cols):
+                if col in seen:
+                    seen[col] += 1
+                    cols[i] = f"{col}_{seen[col]}"
+                else:
+                    seen[col] = 0
+            df.columns = cols
         
         # Data preview
         with st.expander("📋 Data Preview", expanded=False):
@@ -421,8 +432,8 @@ if st.session_state.doc_data:
         
         with col1:
             extraction_query = st.text_input(
-                "🔍 Describe what columns you want to extract:",
-                placeholder="e.g., 'extract all columns related to sales and revenue' or 'find columns with dates'"
+                "🔍 Search for columns (use keywords):",
+                placeholder="e.g., 'region', 'sales', 'date', 'profit' - or use exact column names"
             )
         
         with col2:
@@ -441,37 +452,59 @@ if st.session_state.doc_data:
                             context = chr(10).join(column_info)
                             prompt = f"Based on this user request: '{extraction_query}', analyze these columns and return ONLY the column names that match the request, separated by commas. Return format: column1,column2,column3 (no spaces, no explanations)"
                             
-                            response = get_text_response(prompt, context)
+                            # Smart column matching without AI
+                            query_lower = extraction_query.lower()
+                            available_cols = df.columns.tolist()
+                            suggested_cols = []
                             
-                            if response:
-                                st.write(f"AI Response: {response}")
+                            # Direct keyword matching
+                            keywords = query_lower.split()
+                            
+                            for col in available_cols:
+                                col_lower = col.lower()
+                                # Check if any keyword matches column name
+                                for keyword in keywords:
+                                    if (keyword in col_lower or col_lower in keyword or 
+                                        keyword == col_lower or 
+                                        any(k in col_lower for k in [keyword[:4], keyword[:3]]) if len(keyword) > 3 else False):
+                                        if col not in suggested_cols:
+                                            suggested_cols.append(col)
+                                        break
+                            
+                            # If no direct matches, try semantic matching
+                            if not suggested_cols:
+                                semantic_matches = {
+                                    'sales': ['sales', 'revenue', 'income', 'total'],
+                                    'date': ['date', 'time', 'day', 'month', 'year'],
+                                    'region': ['region', 'area', 'location', 'place'],
+                                    'product': ['product', 'item', 'goods'],
+                                    'category': ['category', 'type', 'class'],
+                                    'profit': ['profit', 'margin', 'earnings'],
+                                    'cost': ['cost', 'price', 'expense'],
+                                    'quantity': ['quantity', 'units', 'amount', 'count']
+                                }
                                 
-                                import re
-                                clean_response = re.sub(r'[^a-zA-Z0-9,\s_-]', '', response)
-                                potential_cols = [col.strip() for col in clean_response.split(',')]
+                                for keyword in keywords:
+                                    for semantic_key, semantic_values in semantic_matches.items():
+                                        if keyword in semantic_values:
+                                            for col in available_cols:
+                                                if any(sv in col.lower() for sv in semantic_values):
+                                                    if col not in suggested_cols:
+                                                        suggested_cols.append(col)
+                            
+                            # Try AI response as backup
+                            ai_response = None
+                            try:
+                                ai_response = get_text_response(prompt, context)
+                                if ai_response and "AI service" not in ai_response:
+                                    st.info(f"💡 AI Suggestion: {ai_response}")
+                            except:
+                                pass
                                 
-                                suggested_cols = []
-                                available_cols = df.columns.tolist()
-                                
-                                for pot_col in potential_cols:
-                                    if pot_col:
-                                        if pot_col in available_cols:
-                                            suggested_cols.append(pot_col)
-                                        else:
-                                            for actual_col in available_cols:
-                                                if pot_col.lower() == actual_col.lower():
-                                                    suggested_cols.append(actual_col)
-                                                    break
-                                            else:
-                                                for actual_col in available_cols:
-                                                    if pot_col.lower() in actual_col.lower() or actual_col.lower() in pot_col.lower():
-                                                        suggested_cols.append(actual_col)
-                                                        break
-                                
-                                suggested_cols = list(set(suggested_cols))
-                                
-                                if suggested_cols:
-                                    st.success(f"🎯 AI found {len(suggested_cols)} matching columns: {', '.join(suggested_cols)}")
+                            suggested_cols = list(set(suggested_cols))
+                            
+                            if suggested_cols:
+                                st.success(f"🎯 Found {len(suggested_cols)} matching columns: {', '.join(suggested_cols)}")
                                     
                                     extracted_df = df[suggested_cols]
                                     st.dataframe(extracted_df.head(10), use_container_width=True)
@@ -500,17 +533,24 @@ if st.session_state.doc_data:
                                             st.session_state['extracted_columns'] = suggested_cols
                                             st.success("✅ Extracted data ready for visualization! Scroll down to create charts.")
                                             st.rerun()
-                                else:
-                                    st.warning(f"❌ No matching columns found for '{extraction_query}'")
-                                    st.info(f"**Available columns**: {', '.join(available_cols)}")
-                                    st.write(f"**AI parsed**: {potential_cols}")
-                                    st.write("💡 **Tip**: Try being more specific or use exact column names")
                             else:
-                                st.error("❌ AI analysis failed")
+                                st.warning(f"❌ No matching columns found for '{extraction_query}'")
+                                st.info(f"**Available columns**: {', '.join(available_cols)}")
+                                st.write("💡 **Tip**: Try keywords like 'sales', 'date', 'region', or use exact column names")
+                                
+                                # Show suggestions based on available columns
+                                suggestions = []
+                                for col in available_cols[:5]:  # Show first 5 as examples
+                                    suggestions.append(f"'{col.lower()}'")
+                                if suggestions:
+                                    st.write(f"**Try searching for**: {', '.join(suggestions)}")
                         except Exception as e:
-                            st.error(f"❌ Error: {str(e)}")
+                            st.error(f"❌ Error in column extraction: {str(e)[:100]}")
+                            # Still show available columns as fallback
+                            st.info(f"**Available columns**: {', '.join(df.columns.tolist())}")
                 else:
                     st.warning("Please enter a description of what columns to extract")
+                    st.write("**Examples**: 'region', 'sales data', 'date columns', 'financial information'")
         
         st.markdown('</div>', unsafe_allow_html=True)
         
